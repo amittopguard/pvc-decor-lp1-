@@ -1,0 +1,131 @@
+{
+  "project_context": {
+    "company": "KDIPL",
+    "industry": "Manufacturing / B2B Materials",
+    "core_products": "PVC Decor Film for Membrane Doors, PVC Laminates 1mm & 3mm",
+    "target_audience": ["Distributors", "Importers", "Manufacturers"],
+    "vibe": "Industrial, Authoritative, Premium B2B, Trustworthy"
+  },
+  "theme": "light",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) + Industrial Manufacturing",
+  "typography": {
+    "headings": "Cabinet Grotesk",
+    "body": "IBM Plex Sans",
+    "weights": [400, 500, 600, 700, 800],
+    "scaling": {
+      "h1": "text-5xl sm:text-6xl lg:text-7xl tracking-tight font-extrabold text-slate-900",
+      "h2": "text-4xl sm:text-5xl tracking-tight font-bold text-slate-900",
+      "h3": "text-2xl sm:text-3xl tracking-tight font-semibold text-slate-800",
+      "h4": "text-xl font-medium text-slate-800",
+      "body": "text-base sm:text-lg leading-relaxed text-slate-600",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-orange-600 mb-4 block"
+    }
+  },
+  "colors": {
+    "background": {
+      "primary": "#FFFFFF",
+      "secondary": "#F8FAFC",
+      "tertiary": "#F1F5F9",
+      "dark_section": "#0F172A"
+    },
+    "text": {
+      "primary": "#0F172A",
+      "secondary": "#475569",
+      "inverse": "#FFFFFF",
+      "inverse_secondary": "#94A3B8"
+    },
+    "brand": {
+      "primary": "#0F172A",
+      "primary_hover": "#1E293B",
+      "accent": "#EA580C",
+      "accent_hover": "#C2410C",
+      "border": "#E2E8F0",
+      "border_dark": "#334155",
+      "success": "#16A34A",
+      "warning": "#EAB308"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Industrial precision. Sharp edges, heavy bento-grids, stark contrast between text and background. No soft shadows; use 1px solid borders for definition.",
+    "section_padding": "py-20 sm:py-32",
+    "container_max": "max-w-7xl mx-auto px-6 lg:px-8",
+    "grid_bento": "grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-6 lg:gap-8",
+    "border_radius": "rounded-none",
+    "card_structure": "border border-slate-200 bg-white p-8 lg:p-12 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)]"
+  },
+  "components_strategy": {
+    "buttons": {
+      "primary": "bg-orange-600 text-white rounded-none px-8 py-4 font-semibold hover:-translate-y-0.5 hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2",
+      "secondary": "bg-slate-900 text-white rounded-none px-8 py-4 font-semibold hover:bg-slate-800 hover:-translate-y-0.5 transition-all duration-200",
+      "outline": "border-2 border-slate-900 text-slate-900 bg-transparent rounded-none px-8 py-4 font-semibold hover:bg-slate-900 hover:text-white transition-all duration-200"
+    },
+    "forms": "Use Shadcn components. Sharp corners (rounded-none). Inputs should have border-slate-300, focus:ring-2 focus:ring-orange-600 focus:border-transparent.",
+    "tables": "Industrial data tables. Deep slate header background, white text. Row backgrounds alternate white and slate-50. Solid 1px borders.",
+    "badges": "Square, uppercase, tight tracking, bg-slate-100 text-slate-700 text-xs font-bold px-2 py-1"
+  },
+  "media": {
+    "hero": [
+      {
+        "url": "https://images.pexels.com/photos/34221993/pexels-photo-34221993.jpeg",
+        "description": "Industrial machinery, factory floor, vacuum press",
+        "category": "hero_background"
+      }
+    ],
+    "products": [
+      {
+        "url": "https://images.unsplash.com/photo-1759262151165-3330c14fd982",
+        "description": "Finished premium PVC door interior",
+        "category": "product_showcase_doors"
+      },
+      {
+        "url": "https://images.pexels.com/photos/9467701/pexels-photo-9467701.jpeg",
+        "description": "Wood laminate texture samples",
+        "category": "catalog_texture_wood"
+      },
+      {
+        "url": "https://images.pexels.com/photos/3847494/pexels-photo-3847494.jpeg",
+        "description": "Marble texture finish",
+        "category": "catalog_texture_marble"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe",
+        "description": "Solid color laminate abstract",
+        "category": "catalog_texture_solid"
+      }
+    ],
+    "logistics": [
+      {
+        "url": "https://images.unsplash.com/photo-1586528116311-ad8ed7c826b5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwxfHxzaGlwcGluZyUyMGNhcmdvJTIwY29udGFpbmVycyUyMGxvZ2lzdGljc3xlbnwwfHx8fDE3NzczMTE4NjR8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Shipping containers for importer section",
+        "category": "importer_section_visual"
+      }
+    ]
+  },
+  "page_sections_flow": [
+    "1. Header: Sticky nav, KDIPL Logo, Nav Links (Products, Distributor, Importers), 'Request Sample' CTA, WhatsApp floating widget.",
+    "2. Hero: Headline '23+ Years of Manufacturing Excellence'. Subheadline 'Premium PVC Decor Film & Laminates. Made in India.' Two Buttons: 'View Catalog' & 'Become a Distributor'. Dark overlay (bg-slate-900/60) on factory background.",
+    "3. Products Showcase (Bento Grid): Split into 'PVC Decor Film (Vacuum Press)' and 'PVC Laminates (1mm/3mm)'. Show textures and end-use doors.",
+    "4. For Distributors (Priority 1): Focus on territory lock-in, high ROI margins, and supply consistency. Lead to Distributor Application form.",
+    "5. For Importers (Priority 2): 'Stop Importing. Buy Direct from India.' Side-by-side Comparison Table (KDIPL vs Importers) comparing Lead Time, MOQ, Customization, Support. Shipping container visual.",
+    "6. For Manufacturers (Priority 3): Focus on consistent quality for furniture/doors.",
+    "7. Texture Catalog: Grid of 8-12 cards showing Wood, Marble, Solid textures. Hover effects. Big CTA to 'Download Full PDF Catalog'.",
+    "8. Manufacturing & Trust: Process timeline (Vacuum Press -> QC). Stat counters: 23+ Years, Pan-India Network, ISO capacity placeholders.",
+    "9. Lead Capture Mega-Section: Shadcn Tabs switching between 'Request Sample', 'Get Quote', and 'Distributor Application'. Each form posts to DB and triggers email logic.",
+    "10. Footer: Contact (WhatsApp: +91 93113 42988, Email: sales@kdipl.in), Addresses, Quick Links."
+  ],
+  "admin_panel_requirements": {
+    "login": "Simple password protected login route at /admin.",
+    "dashboard_layout": "Sidebar nav, main content area. Strict industrial SaaS look. Dashboard metric cards for total leads.",
+    "data_table": "Shadcn Data Table for Leads. Columns: Date, Type (Sample/Quote/Distributor), Name, Company, Email, Phone, Status (New, Contacted, Closed).",
+    "actions": "Ability to view lead details, update status, search by name/phone, and export to CSV."
+  },
+  "instructions_to_main_agent": [
+    "INSTALLATION: Ensure you install `lucide-react` for icons and standard Shadcn components (button, input, select, tabs, table, dialog).",
+    "FONTS: Import 'Cabinet Grotesk' from Fontshare or Google Fonts (or use a close alternative like 'Outfit' or 'Space Grotesk' but make it sharp) and 'IBM Plex Sans' for body.",
+    "AESTHETIC: Do not use gradients. Use solid colors. Make the website feel heavy, reliable, and engineered. Square corners (rounded-none) are preferred for the brutalist industrial look.",
+    "LAYOUT: Use pure HTML/Tailwind grids for the marketing sections. Use Shadcn strictly for interactive elements like Forms, Tabs (for the multi-lead capture), and the Admin Data Table.",
+    "DATA ATTRIBUTES: Add `data-testid` to all forms, buttons, and admin actions.",
+    "BACKEND: Create necessary FastAPI endpoints for `/api/leads` (POST for new lead, GET for admin), and implement a simple email notification mock or integration.",
+    "IMAGES: strictly use the URLs provided in the media section. Do not use placehold.it or dummy images."
+  ]
+}
