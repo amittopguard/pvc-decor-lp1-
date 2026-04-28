@@ -1,34 +1,41 @@
-import { useEffect, useState } from "react";
-import { ArrowUpRight, Globe, Truck, Factory, Sparkles } from "lucide-react";
-
-const ROTATE = ["Imports", "Middlemen", "Long Lead Times", "Container MOQs"];
+import { useEffect, useRef, useState } from "react";
+import { ArrowUpRight, Sparkles, Truck, Globe, Factory } from "lucide-react";
 
 const AUDIENCES = [
-  { id: "distributors", label: "I'm a Distributor", icon: Truck, target: "#distributors" },
-  { id: "importers", label: "I'm an Importer", icon: Globe, target: "#importers" },
-  { id: "manufacturers", label: "I'm a Manufacturer", icon: Factory, target: "#manufacturers" },
-];
-
-const TEXTURES = [
-  { src: "https://images.pexels.com/photos/9467701/pexels-photo-9467701.jpeg", code: "KD-W-102", label: "Walnut Grove" },
-  { src: "https://images.pexels.com/photos/3847494/pexels-photo-3847494.jpeg", code: "KD-M-204", label: "Carrara White" },
-  { src: "https://images.unsplash.com/photo-1759262151165-3330c14fd982", code: "KD-D-001", label: "Press Finish" },
-  { src: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe", code: "KD-S-011", label: "Midnight Solid" },
+  { id: "distributors", label: "Distributor", icon: Truck, target: "#distributors" },
+  { id: "importers", label: "Importer", icon: Globe, target: "#importers" },
+  { id: "manufacturers", label: "Manufacturer", icon: Factory, target: "#manufacturers" },
 ];
 
 const MARQUEE = [
-  "KD-W-102 Walnut", "KD-M-204 Carrara", "KD-S-011 Midnight", "KD-W-118 Teak Linear",
-  "KD-M-221 Statuario Gold", "KD-S-034 Oyster Grey", "KD-W-145 Oak Rustic", "KD-M-260 Nero Marquina",
-  "Vacuum Press Ready", "1mm · 3mm Laminate", "Pan-India Dispatch",
+  "PVC Decor Film", "Vacuum Press Ready", "Laminate 1 mm", "Laminate 3 mm",
+  "Pan-India Dispatch", "Custom Prints", "Low MOQ", "Export Documentation",
+  "Walnut · Marble · Solid", "23 Years In The Press",
 ];
 
-export default function Hero() {
-  const [idx, setIdx] = useState(0);
-
+function useCountUp(end, durationMs = 1400, start = 0) {
+  const [v, setV] = useState(start);
+  const ran = useRef(false);
   useEffect(() => {
-    const t = setInterval(() => setIdx((i) => (i + 1) % ROTATE.length), 2200);
-    return () => clearInterval(t);
-  }, []);
+    if (ran.current) return;
+    ran.current = true;
+    const t0 = performance.now();
+    let raf = 0;
+    const tick = (now) => {
+      const p = Math.min(1, (now - t0) / durationMs);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setV(Math.round(start + (end - start) * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [end, durationMs, start]);
+  return v;
+}
+
+export default function Hero() {
+  const days = useCountUp(5, 1600);
+  const importDays = useCountUp(47, 1600);
 
   return (
     <section
@@ -36,34 +43,60 @@ export default function Hero() {
       data-testid="hero-section"
       className="relative bg-slate-950 text-white overflow-hidden noise-layer pt-28 pb-0"
     >
-      {/* Grid texture overlay */}
-      <div className="absolute inset-0 kdipl-grid-bg opacity-[0.07]" aria-hidden />
-      {/* Vertical orange accent bar */}
-      <div className="absolute left-6 lg:left-8 top-0 bottom-32 w-px bg-orange-500/40 hidden lg:block" aria-hidden />
+      {/* Backdrop layers */}
+      <div className="absolute inset-0 kdipl-grid-bg opacity-[0.06]" aria-hidden />
+      <div
+        className="absolute -right-32 top-20 w-[640px] h-[640px] rounded-full opacity-[0.06] blur-3xl bg-orange-500"
+        aria-hidden
+      />
 
-      <div className="relative max-w-7xl mx-auto px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 pt-10 lg:pt-16">
-        {/* LEFT — copy column */}
-        <div className="lg:col-span-7 flex flex-col">
+      {/* Stamp badge — top right */}
+      <div
+        data-testid="hero-stamp"
+        className="hidden lg:flex absolute top-24 right-8 items-center gap-3 border border-orange-500/40 px-3 py-1.5 rotate-[3deg]"
+      >
+        <span className="w-1.5 h-1.5 bg-orange-500 pulse-dot" />
+        <span className="text-[10px] uppercase tracking-[0.3em] font-bold text-orange-400">
+          Origin India &middot; Seal 23/02
+        </span>
+      </div>
+
+      <div className="relative max-w-7xl mx-auto px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 pt-12 lg:pt-20">
+        {/* LEFT — declarative stack */}
+        <div className="lg:col-span-8 flex flex-col">
           <div className="flex items-center gap-3 fade-up">
-            <span className="w-2 h-2 bg-orange-500 pulse-dot" />
-            <span className="text-[10px] uppercase tracking-[0.28em] font-bold text-orange-400">
-              Live since 2002 &middot; Made in India
+            <span className="w-8 h-px bg-orange-500" />
+            <span className="text-[10px] uppercase tracking-[0.3em] font-bold text-orange-400">
+              KDIPL &middot; Manufacturer &middot; Since 2002
             </span>
           </div>
 
-          <h1 className="mt-7 font-display font-extrabold tracking-tight leading-[0.95] text-5xl sm:text-6xl lg:text-[5.25rem] fade-up">
-            <span className="block text-slate-500 line-through decoration-orange-500 decoration-[6px] sm:decoration-[8px] underline-offset-[6px]">
-              {ROTATE[idx]}.
-            </span>
-            <span className="block text-white mt-2">Source it&nbsp;direct.</span>
-            <span className="block mt-2">
-              <span className="text-orange-500">From the press,</span>{" "}
-              <span className="text-white">to your line.</span>
-            </span>
-          </h1>
+          {/* The stab — declarative stacked lines */}
+          <div className="mt-8 font-display font-extrabold tracking-tight leading-[0.92] fade-up">
+            <div className="text-white text-5xl sm:text-7xl lg:text-[6rem]">
+              Imports are slow.
+            </div>
+            <div className="text-slate-400 text-3xl sm:text-5xl lg:text-7xl mt-3 sm:mt-4 pl-4 sm:pl-12 lg:pl-24">
+              And expensive.
+            </div>
+            <div className="text-slate-500 text-xl sm:text-3xl lg:text-4xl mt-3 sm:mt-4 pl-8 sm:pl-24 lg:pl-48">
+              And, honestly &mdash;
+            </div>
 
-          <p className="mt-7 text-base sm:text-lg text-slate-300 leading-relaxed max-w-xl fade-up">
-            KDIPL manufactures premium <strong className="text-white font-semibold">PVC Decor Film</strong> for vacuum-press membrane doors and now <strong className="text-white font-semibold">PVC Laminates 1&nbsp;mm &amp; 3&nbsp;mm</strong> for acrylic sheets &mdash; with 23 years of factory discipline behind every roll.
+            {/* The twist — full bleed orange line with a flicker */}
+            <div className="mt-5 sm:mt-7 relative">
+              <div className="text-orange-500 text-6xl sm:text-7xl lg:text-[7.5rem] leading-none tracking-tight">
+                OPTIONAL.
+              </div>
+              <span className="absolute -top-2 -right-2 sm:top-0 sm:right-2 lg:top-2 lg:right-6 text-[10px] uppercase tracking-[0.28em] font-bold text-orange-300 hidden sm:block">
+                ____ KDIPL replaces them.
+              </span>
+            </div>
+          </div>
+
+          {/* Twist sub-line */}
+          <p className="mt-8 text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl fade-up">
+            We press <strong className="text-white font-semibold">PVC Decor Film</strong> for membrane doors and now <strong className="text-white font-semibold">PVC Laminates 1&nbsp;mm &amp; 3&nbsp;mm</strong> for acrylic sheets. From our floor to yours &mdash; <span className="text-orange-400 font-semibold">in five days, not fifty.</span>
           </p>
 
           {/* Audience pills */}
@@ -73,10 +106,10 @@ export default function Hero() {
                 key={a.id}
                 href={a.target}
                 data-testid={`hero-pill-${a.id}`}
-                className="group inline-flex items-center gap-2 border border-white/15 bg-white/5 backdrop-blur px-4 py-2.5 text-xs uppercase tracking-[0.14em] font-semibold text-white hover:bg-orange-600 hover:border-orange-600 transition-all"
+                className="group inline-flex items-center gap-2 border border-white/15 bg-white/5 backdrop-blur px-4 py-2.5 text-xs uppercase tracking-[0.16em] font-semibold text-white hover:bg-orange-600 hover:border-orange-600 transition-all"
               >
                 <a.icon size={14} className="text-orange-400 group-hover:text-white transition-colors" />
-                {a.label}
+                I&rsquo;m a {a.label}
                 <ArrowUpRight size={12} className="opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
               </a>
             ))}
@@ -92,82 +125,85 @@ export default function Hero() {
               <Sparkles size={16} /> Get a Free Sample Box
             </a>
             <a
-              href="#catalog"
-              data-testid="hero-cta-catalog"
+              href="#importers"
+              data-testid="hero-cta-savings"
               className="border border-white/25 text-white bg-transparent px-8 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-white hover:text-slate-900 transition-all duration-200 inline-flex items-center justify-center gap-2"
             >
-              Browse Catalog
+              See Import vs KDIPL
               <ArrowUpRight size={16} />
             </a>
           </div>
-
-          {/* Stat ticker */}
-          <div className="mt-12 lg:mt-14 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-5 border-t border-white/10 pt-7 fade-up" data-testid="hero-stats">
-            {[
-              { v: "23+", l: "Years" },
-              { v: "800+", l: "Designs" },
-              { v: "1500mm", l: "Max Width" },
-              { v: "5–15d", l: "Lead Time" },
-            ].map((s, i) => (
-              <div key={i} className="border-l border-white/10 pl-4 first:border-l-0 first:pl-0">
-                <div className="font-display text-2xl sm:text-3xl font-bold text-white">{s.v}</div>
-                <div className="text-[10px] uppercase tracking-[0.22em] text-slate-400 mt-1">{s.l}</div>
-              </div>
-            ))}
-          </div>
         </div>
 
-        {/* RIGHT — texture mosaic */}
-        <div className="lg:col-span-5 relative">
-          <div className="grid grid-cols-2 grid-rows-2 gap-2 sm:gap-3 aspect-[4/5] lg:aspect-auto lg:h-[640px]">
-            {TEXTURES.map((t, i) => (
-              <div
-                key={i}
-                data-testid={`hero-texture-${i}`}
-                className={`relative overflow-hidden border border-white/10 group ${
-                  i === 0 ? "row-span-2" : ""
-                }`}
-              >
-                <img
-                  src={t.src}
-                  alt={t.label}
-                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/10 to-transparent" />
-                <div className="absolute bottom-0 left-0 p-3 sm:p-4">
-                  <div className="text-[9px] uppercase tracking-[0.22em] text-orange-400 font-bold">{t.code}</div>
-                  <div className="text-white text-xs sm:text-sm font-display font-semibold mt-0.5">{t.label}</div>
+        {/* RIGHT — proof tile column */}
+        <div className="lg:col-span-4 flex flex-col gap-5 fade-up" data-testid="hero-proof-column">
+          {/* The 47 → 5 days proof */}
+          <div className="border border-orange-500/30 bg-slate-900/60 backdrop-blur p-7 relative overflow-hidden">
+            <div className="absolute top-0 left-0 h-full w-1 bg-orange-500" />
+            <div className="text-[10px] uppercase tracking-[0.28em] font-bold text-orange-400">
+              Days from PO &rarr; factory floor
+            </div>
+
+            <div className="mt-6 grid grid-cols-2 gap-4 items-end">
+              <div className="relative">
+                <div className="font-display font-extrabold text-6xl text-slate-500 leading-none">
+                  {importDays}
                 </div>
+                <div className="absolute top-1/2 left-0 right-0 h-1 bg-orange-500 -rotate-6" />
+                <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500 font-semibold mt-3">
+                  Imported &mdash; sea
+                </div>
+              </div>
+              <div>
+                <div className="font-display font-extrabold text-6xl text-orange-500 leading-none">
+                  {days}
+                </div>
+                <div className="text-[10px] uppercase tracking-[0.22em] text-orange-300 font-bold mt-3">
+                  KDIPL &mdash; direct
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-white/10 text-xs text-slate-400 leading-relaxed">
+              Average for a 5,000 sqm order. <span className="text-white font-semibold">42 days back into your working capital.</span>
+            </div>
+          </div>
+
+          {/* Stat micro-tiles */}
+          <div className="grid grid-cols-2 gap-px bg-white/10 border border-white/10">
+            {[
+              { v: "23+", l: "Years pressing" },
+              { v: "800+", l: "Designs" },
+              { v: "1500", l: "mm max width" },
+              { v: "Low", l: "MOQ" },
+            ].map((s, i) => (
+              <div key={i} className="bg-slate-950/80 p-5">
+                <div className="font-display font-extrabold text-2xl text-white leading-none">{s.v}</div>
+                <div className="text-[9px] uppercase tracking-[0.22em] text-slate-400 mt-2.5 font-bold">{s.l}</div>
               </div>
             ))}
           </div>
 
-          {/* Floating badge */}
-          <div className="absolute -top-4 -left-4 sm:-top-6 sm:-left-6 bg-orange-600 text-white px-4 py-3 shadow-xl shadow-orange-900/40 hidden md:block">
-            <div className="text-[9px] uppercase tracking-[0.22em] font-bold opacity-80">New Launch</div>
-            <div className="font-display font-bold text-sm leading-tight">PVC Laminate 1mm &amp; 3mm</div>
-          </div>
-
-          <div className="absolute -bottom-4 -right-4 sm:-bottom-6 sm:-right-6 bg-white text-slate-900 px-4 py-3 shadow-xl hidden md:block">
-            <div className="text-[9px] uppercase tracking-[0.22em] font-bold text-slate-500">Live</div>
-            <div className="font-display font-bold text-sm leading-tight flex items-center gap-2">
-              <span className="w-2 h-2 bg-green-500 pulse-dot rounded-full" />
-              Sample dispatch &middot; today
-            </div>
+          {/* Live ticker */}
+          <div className="border border-white/10 bg-slate-900/60 px-5 py-3.5 flex items-center gap-3">
+            <span className="w-2 h-2 bg-green-500 rounded-full pulse-dot" />
+            <span className="text-[11px] uppercase tracking-[0.18em] text-slate-300 font-semibold">
+              Sample dispatch &middot; today &middot; Delhi
+            </span>
           </div>
         </div>
       </div>
 
       {/* Bottom marquee */}
-      <div className="relative mt-14 lg:mt-20 border-t border-white/10 bg-slate-900/60">
-        <div className="flex overflow-hidden no-scrollbar py-5">
+      <div className="relative mt-14 lg:mt-20 border-t border-white/10 bg-slate-900/80">
+        <div className="flex overflow-hidden no-scrollbar py-4">
           <div className="flex shrink-0 gap-12 animate-marquee whitespace-nowrap pr-12">
             {[...MARQUEE, ...MARQUEE].map((item, i) => (
               <span
                 key={i}
-                className="text-xs uppercase tracking-[0.22em] text-slate-400 font-semibold flex items-center gap-3"
+                className="text-xs uppercase tracking-[0.28em] text-slate-400 font-semibold flex items-center gap-3"
               >
-                <span className="w-1 h-1 bg-orange-500" />
+                <span className="w-1.5 h-1.5 bg-orange-500 rotate-45" />
                 {item}
               </span>
             ))}
