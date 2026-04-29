@@ -197,23 +197,25 @@ function Dashboard({ onLogout }) {
 
       <main className="max-w-7xl mx-auto px-6 py-10">
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10" data-testid="stats-grid">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-10" data-testid="stats-grid">
             <StatCard label="Total Leads" value={stats.total} accent />
             <StatCard label="Sample" value={stats.by_type?.sample ?? 0} />
             <StatCard label="Quote" value={stats.by_type?.quote ?? 0} />
             <StatCard label="Distributor" value={stats.by_type?.distributor ?? 0} />
+            <StatCard label="Price Match" value={stats.by_type?.comparison ?? 0} />
           </div>
         )}
 
         <div className="bg-white border border-slate-200">
           <div className="p-5 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center gap-4">
             <Tabs value={type} onValueChange={setType} className="w-full lg:w-auto">
-              <TabsList className="rounded-none bg-slate-100 p-0 h-auto border border-slate-200">
+              <TabsList className="rounded-none bg-slate-100 p-0 h-auto border border-slate-200 flex-wrap">
                 {[
                   { v: "all", l: "All" },
                   { v: "sample", l: "Sample" },
                   { v: "quote", l: "Quote" },
                   { v: "distributor", l: "Distributor" },
+                  { v: "comparison", l: "Price Match" },
                 ].map((t) => (
                   <TabsTrigger
                     key={t.v}
@@ -353,6 +355,41 @@ function Dashboard({ onLogout }) {
                   <div className="sm:col-span-2">
                     <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Message</div>
                     <div className="mt-1 text-slate-900 bg-slate-50 border border-slate-200 p-3 whitespace-pre-wrap">{selected.message}</div>
+                  </div>
+                )}
+                {selected.file_meta && (
+                  <div className="sm:col-span-2" data-testid="lead-file-meta">
+                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Uploaded File</div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const token = localStorage.getItem("kdipl_admin_token");
+                          const res = await fetch(`${API}/admin/leads/${selected.id}/file`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                          });
+                          if (!res.ok) throw new Error();
+                          const blob = await res.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = selected.file_meta.filename;
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          window.URL.revokeObjectURL(url);
+                        } catch {
+                          toast.error("Download failed");
+                        }
+                      }}
+                      data-testid="lead-file-download-btn"
+                      className="mt-2 w-full flex items-center gap-3 border border-slate-300 hover:border-orange-600 hover:bg-orange-50 transition-colors p-3 text-left"
+                    >
+                      <Download size={18} className="text-orange-600 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-slate-900 truncate">{selected.file_meta.filename}</div>
+                        <div className="text-xs text-slate-500">{(selected.file_meta.size / 1024).toFixed(1)} KB &middot; click to download</div>
+                      </div>
+                    </button>
                   </div>
                 )}
               </div>

@@ -171,7 +171,8 @@ class TestAdminLeads:
         assert r.status_code == 200
         d = r.json()
         assert "total" in d
-        assert set(d["by_type"].keys()) == {"sample", "quote", "distributor"}
+        assert set(d["by_type"].keys()) == {"sample", "quote", "distributor", "comparison"}
+        assert isinstance(d["by_type"]["comparison"], int)
         assert set(d["by_status"].keys()) == {"new", "contacted", "qualified", "closed", "spam"}
 
     def test_update_status(self, auth_headers):
@@ -221,6 +222,137 @@ class TestAdminLeads:
         r2 = session.delete(f"{API}/admin/leads/{lead_id}", headers=auth_headers, timeout=15)
         assert r2.status_code == 404
         created_ids.remove(lead_id)
+
+
+# -------- Comparison (Price Match) lead with file upload --------
+class TestComparisonLeads:
+    def test_create_comparison_no_file(self):
+        r = requests.post(f"{API}/leads/comparison", data={
+            "name": "TEST_Comparison NoFile",
+            "email": "test_cmp_nofile@example.com",
+            "phone": "+919999990010",
+            "company": "Importer Co",
+            "country": "UAE",
+            "current_supplier": "BrandX China",
+            "monthly_volume_sqm": "8000",
+            "product_interest": "PVC Decor Film",
+            "message": "Please beat this",
+        }, timeout=20)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["type"] == "comparison"
+        assert d["current_supplier"] == "BrandX China"
+        assert d["monthly_volume_sqm"] == "8000"
+        assert d["file_meta"] is None
+        assert "_id" not in d
+        created_ids.append(d["id"])
+
+    def test_create_comparison_with_pdf_file(self):
+        # Minimal valid PDF
+        pdf_bytes = b"%PDF-1.4\n%TEST\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
+        files = {"file": ("invoice.pdf", pdf_bytes, "application/pdf")}
+        data = {
+            "name": "TEST_Comparison WithFile",
+            "email": "test_cmp_file@example.com",
+            "phone": "+919999990011",
+            "current_supplier": "BrandY",
+            "monthly_volume_sqm": "5000",
+        }
+        r = requests.post(f"{API}/leads/comparison", data=data, files=files, timeout=30)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["type"] == "comparison"
+        assert d["file_meta"] is not None
+        fm = d["file_meta"]
+        assert fm["filename"] == "invoice.pdf"
+        assert fm["size"] == len(pdf_bytes)
+        assert fm["stored"] and fm["stored"].endswith(".pdf")
+        created_ids.append(d["id"])
+        # store id for download test
+        TestComparisonLeads._lead_with_file_id = d["id"]
+        TestComparisonLeads._expected_filename = "invoice.pdf"
+        TestComparisonLeads._expected_bytes = pdf_bytes
+
+    def test_create_comparison_disallowed_extension(self):
+        files = {"file": ("malware.exe", b"MZ binary", "application/octet-stream")}
+        data = {
+            "name": "TEST_Comparison Bad",
+            "email": "test_cmp_bad@example.com",
+            "phone": "+919999990012",
+        }
+        r = requests.post(f"{API}/leads/comparison", data=data, files=files, timeout=20)
+        assert r.status_code == 400, r.text
+        assert "Unsupported" in r.text or "file" in r.text.lower()
+
+    def test_create_comparison_oversize_file(self):
+        big = b"A" * (10 * 1024 * 1024 + 100)  # > 10 MB
+        files = {"file": ("big.pdf", big, "application/pdf")}
+        data = {
+            "name": "TEST_Comparison Big",
+            "email": "test_cmp_big@example.com",
+            "phone": "+919999990013",
+        }
+        r = requests.post(f"{API}/leads/comparison", data=data, files=files, timeout=60)
+        assert r.status_code == 400, r.text
+
+    def test_create_comparison_missing_required(self):
+        r = requests.post(f"{API}/leads/comparison",
+                          data={"name": "x"}, timeout=15)
+        assert r.status_code == 422
+
+    def test_admin_download_file(self, auth_headers):
+        lead_id = getattr(TestComparisonLeads, "_lead_with_file_id", None)
+        if not lead_id:
+            pytest.skip("no comparison lead with file available")
+        r = requests.get(f"{API}/admin/leads/{lead_id}/file",
+                         headers=auth_headers, timeout=20)
+        assert r.status_code == 200, r.text
+        cd = r.headers.get("content-disposition", "")
+        assert "invoice.pdf" in cd, cd
+        assert r.content == TestComparisonLeads._expected_bytes
+
+    def test_admin_download_file_requires_auth(self):
+        lead_id = getattr(TestComparisonLeads, "_lead_with_file_id", None)
+        if not lead_id:
+            pytest.skip("no comparison lead with file")
+        r = requests.get(f"{API}/admin/leads/{lead_id}/file", timeout=15)
+        assert r.status_code == 401
+
+    def test_admin_download_unknown_lead_404(self, auth_headers):
+        r = requests.get(f"{API}/admin/leads/nonexistent-xyz/file",
+                         headers=auth_headers, timeout=15)
+        assert r.status_code == 404
+
+    def test_admin_download_lead_without_file_404(self, auth_headers):
+        # Create a comparison lead with no file then attempt download
+        r = requests.post(f"{API}/leads/comparison", data={
+            "name": "TEST_Comparison NoFile2",
+            "email": "test_cmp_nofile2@example.com",
+            "phone": "+919999990014",
+        }, timeout=15)
+        assert r.status_code == 200
+        lid = r.json()["id"]
+        created_ids.append(lid)
+        r2 = requests.get(f"{API}/admin/leads/{lid}/file",
+                          headers=auth_headers, timeout=15)
+        assert r2.status_code == 404
+
+    def test_stats_includes_comparison(self, auth_headers):
+        r = requests.get(f"{API}/admin/stats", headers=auth_headers, timeout=15)
+        assert r.status_code == 200
+        d = r.json()
+        assert "comparison" in d["by_type"]
+        assert d["by_type"]["comparison"] >= 1
+
+    def test_csv_includes_new_fields(self, auth_headers):
+        r = requests.get(f"{API}/admin/leads/export.csv",
+                         headers=auth_headers, timeout=20)
+        assert r.status_code == 200
+        body = r.text
+        # Header should include new columns
+        header = body.splitlines()[0]
+        assert "current_supplier" in header
+        assert "monthly_volume_sqm" in header
 
 
 def test_zz_cleanup():

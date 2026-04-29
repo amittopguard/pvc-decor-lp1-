@@ -1,5 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File, Form
+from fastapi.responses import StreamingResponse, FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -33,6 +33,11 @@ SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
 LEAD_TO_EMAIL = os.environ.get('LEAD_TO_EMAIL', 'sales@kdipl.in')
 LEAD_CC_EMAIL = os.environ.get('LEAD_CC_EMAIL', '')
 
+UPLOAD_DIR = ROOT_DIR / "uploads"
+UPLOAD_DIR.mkdir(exist_ok=True)
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+ALLOWED_UPLOAD_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".xlsx", ".xls", ".csv", ".doc", ".docx"}
+
 if RESEND_KEY:
     resend.api_key = RESEND_KEY
 
@@ -44,8 +49,15 @@ logger = logging.getLogger(__name__)
 
 
 # --------- Models ---------
-LeadType = Literal["sample", "quote", "distributor"]
+LeadType = Literal["sample", "quote", "distributor", "comparison"]
 LeadStatus = Literal["new", "contacted", "qualified", "closed", "spam"]
+
+
+class FileMeta(BaseModel):
+    filename: str
+    stored: str
+    size: int
+    content_type: Optional[str] = None
 
 
 class LeadIn(BaseModel):
@@ -62,6 +74,8 @@ class LeadIn(BaseModel):
     territory: Optional[str] = Field(default=None, max_length=120)
     experience_years: Optional[str] = Field(default=None, max_length=40)
     expected_volume: Optional[str] = Field(default=None, max_length=120)
+    current_supplier: Optional[str] = Field(default=None, max_length=180)
+    monthly_volume_sqm: Optional[str] = Field(default=None, max_length=80)
     message: Optional[str] = Field(default=None, max_length=2000)
 
 
@@ -69,6 +83,7 @@ class Lead(LeadIn):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     status: LeadStatus = "new"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    file_meta: Optional[FileMeta] = None
 
 
 class LeadStatusUpdate(BaseModel):
@@ -180,6 +195,55 @@ async def create_lead(payload: LeadIn):
     return lead
 
 
+@api_router.post("/leads/comparison", response_model=Lead)
+async def create_comparison_lead(
+    name: str = Form(...),
+    email: EmailStr = Form(...),
+    phone: str = Form(...),
+    company: Optional[str] = Form(None),
+    country: Optional[str] = Form(None),
+    city: Optional[str] = Form(None),
+    current_supplier: Optional[str] = Form(None),
+    monthly_volume_sqm: Optional[str] = Form(None),
+    product_interest: Optional[str] = Form(None),
+    message: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+):
+    file_meta = None
+    if file is not None and file.filename:
+        ext = Path(file.filename).suffix.lower()
+        if ext not in ALLOWED_UPLOAD_EXT:
+            raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+        contents = await file.read()
+        if len(contents) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=400, detail="File exceeds 10MB limit")
+        if not contents:
+            raise HTTPException(status_code=400, detail="Empty file uploaded")
+        stored_name = f"{uuid.uuid4().hex}{ext}"
+        target = UPLOAD_DIR / stored_name
+        target.write_bytes(contents)
+        file_meta = FileMeta(
+            filename=file.filename,
+            stored=stored_name,
+            size=len(contents),
+            content_type=file.content_type,
+        )
+
+    lead = Lead(
+        type="comparison",
+        name=name, email=email, phone=phone, company=company,
+        country=country, city=city,
+        current_supplier=current_supplier, monthly_volume_sqm=monthly_volume_sqm,
+        product_interest=product_interest, message=message,
+        file_meta=file_meta,
+    )
+    doc = lead.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.leads.insert_one(doc)
+    asyncio.create_task(send_lead_email(lead))
+    return lead
+
+
 # --------- Admin Routes ---------
 @api_router.post("/admin/login")
 async def admin_login(body: AdminLogin):
@@ -198,7 +262,7 @@ async def admin_stats(_: bool = Depends(require_admin)):
     total = await db.leads.count_documents({})
     by_type = {}
     by_status = {}
-    for t in ["sample", "quote", "distributor"]:
+    for t in ["sample", "quote", "distributor", "comparison"]:
         by_type[t] = await db.leads.count_documents({"type": t})
     for s in ["new", "contacted", "qualified", "closed", "spam"]:
         by_status[s] = await db.leads.count_documents({"status": s})
@@ -251,7 +315,8 @@ async def admin_export_csv(_: bool = Depends(require_admin)):
     fields = [
         "created_at", "type", "status", "name", "company", "email", "phone",
         "country", "city", "product_interest", "quantity", "territory",
-        "experience_years", "expected_volume", "message", "id",
+        "experience_years", "expected_volume", "current_supplier",
+        "monthly_volume_sqm", "message", "id",
     ]
     writer = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
     writer.writeheader()
@@ -262,6 +327,24 @@ async def admin_export_csv(_: bool = Depends(require_admin)):
         iter([buf.getvalue()]),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="kdipl-leads-{datetime.now(timezone.utc).strftime("%Y%m%d")}.csv"'},
+    )
+
+
+@api_router.get("/admin/leads/{lead_id}/file")
+async def admin_download_lead_file(lead_id: str, _: bool = Depends(require_admin)):
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    fm = lead.get("file_meta")
+    if not fm or not fm.get("stored"):
+        raise HTTPException(status_code=404, detail="No file attached")
+    path = UPLOAD_DIR / fm["stored"]
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File missing on disk")
+    return FileResponse(
+        path,
+        filename=fm.get("filename") or fm["stored"],
+        media_type=fm.get("content_type") or "application/octet-stream",
     )
 
 

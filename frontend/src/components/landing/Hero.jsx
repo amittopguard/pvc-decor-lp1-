@@ -121,14 +121,14 @@ export default function Hero() {
             >
               <Sparkles size={16} /> Get a Free Sample Box
             </a>
-            <a
-              href="#importers"
+            <button
+              onClick={() => window.kdiplOpenComparison && window.kdiplOpenComparison()}
               data-testid="hero-cta-savings"
               className="border border-white/25 text-white bg-transparent px-8 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-white hover:text-slate-900 transition-all duration-200 inline-flex items-center justify-center gap-2"
             >
-              See Import vs KDIPL
+              Beat My Import Price
               <ArrowUpRight size={16} />
-            </a>
+            </button>
           </div>
         </div>
 

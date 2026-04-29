@@ -1,17 +1,17 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { api } from "@/lib/api";
-import { Loader2, Send } from "lucide-react";
+import { api, API } from "@/lib/api";
+import { Loader2, Send, Upload, FileCheck2, X } from "lucide-react";
 
 const initial = {
   name: "", company: "", email: "", phone: "", country: "India", city: "",
   product_interest: "", quantity: "", territory: "", experience_years: "",
-  expected_volume: "", message: "",
+  expected_volume: "", current_supplier: "", monthly_volume_sqm: "", message: "",
 };
 
 function Field({ label, required, children, testid }) {
@@ -29,6 +29,18 @@ export default function LeadForms() {
   const [tab, setTab] = useState("sample");
   const [state, setState] = useState(initial);
   const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState(null);
+  const fileRef = useRef(null);
+
+  // listen for hash to switch tabs (e.g., #contact?tab=comparison)
+  if (typeof window !== "undefined" && window.__kdiplSetLeadTab !== "set") {
+    window.__kdiplSetLeadTab = "set";
+    window.kdiplOpenComparison = () => {
+      setTab("comparison");
+      const el = document.getElementById("contact");
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    };
+  }
 
   const up = (k) => (e) => setState((s) => ({ ...s, [k]: e?.target?.value ?? e }));
 
@@ -40,20 +52,39 @@ export default function LeadForms() {
     }
     setLoading(true);
     try {
-      const payload = { type: tab, ...state };
-      const { data } = await api.post("/leads", payload);
+      let data;
+      if (tab === "comparison") {
+        const fd = new FormData();
+        const fields = [
+          "name", "email", "phone", "company", "country", "city",
+          "current_supplier", "monthly_volume_sqm", "product_interest", "message",
+        ];
+        fields.forEach((k) => { if (state[k]) fd.append(k, state[k]); });
+        if (file) fd.append("file", file);
+        const res = await fetch(`${API}/leads/comparison`, { method: "POST", body: fd });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || "Submission failed");
+        }
+        data = await res.json();
+      } else {
+        const payload = { type: tab, ...state };
+        const r = await api.post("/leads", payload);
+        data = r.data;
+      }
       toast.success(
-        tab === "distributor"
-          ? "Application received. Our team will reach out within 24 hours."
-          : tab === "quote"
-          ? "Quote request received. We will email you shortly."
-          : "Sample request received. You'll hear from us soon."
+        tab === "distributor" ? "Application received. Our team will reach out within 24 hours."
+        : tab === "quote" ? "Quote request received. We will email you shortly."
+        : tab === "comparison" ? "Got it. We'll send a price comparison within 24 hours."
+        : "Sample request received. You'll hear from us soon."
       );
       setState(initial);
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = "";
       return data;
     } catch (err) {
-      const msg = err?.response?.data?.detail || "Could not submit. Please try again.";
-      toast.error(Array.isArray(msg) ? "Please check your entries" : String(msg));
+      const msg = err?.message || err?.response?.data?.detail || "Could not submit. Please try again.";
+      toast.error(typeof msg === "string" ? msg : "Please check your entries");
     } finally {
       setLoading(false);
     }
@@ -103,29 +134,36 @@ export default function LeadForms() {
             <div className="bg-white text-slate-900 p-6 sm:p-10 border border-slate-200">
               <Tabs value={tab} onValueChange={setTab}>
                 <TabsList
-                  className="w-full rounded-none bg-slate-100 p-0 h-auto flex border border-slate-200"
+                  className="w-full rounded-none bg-slate-100 p-0 h-auto flex flex-wrap border border-slate-200"
                   data-testid="lead-form-tabs"
                 >
                   <TabsTrigger
                     value="sample"
                     data-testid="tab-sample"
-                    className="flex-1 rounded-none py-3.5 text-xs uppercase tracking-[0.14em] font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white"
+                    className="flex-1 min-w-[110px] rounded-none py-3.5 text-xs uppercase tracking-[0.14em] font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white"
                   >
                     Sample
                   </TabsTrigger>
                   <TabsTrigger
                     value="quote"
                     data-testid="tab-quote"
-                    className="flex-1 rounded-none py-3.5 text-xs uppercase tracking-[0.14em] font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white"
+                    className="flex-1 min-w-[110px] rounded-none py-3.5 text-xs uppercase tracking-[0.14em] font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white"
                   >
                     Quote
                   </TabsTrigger>
                   <TabsTrigger
                     value="distributor"
                     data-testid="tab-distributor"
-                    className="flex-1 rounded-none py-3.5 text-xs uppercase tracking-[0.14em] font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white"
+                    className="flex-1 min-w-[110px] rounded-none py-3.5 text-xs uppercase tracking-[0.14em] font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white"
                   >
                     Distributor
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="comparison"
+                    data-testid="tab-comparison"
+                    className="flex-1 min-w-[140px] rounded-none py-3.5 text-xs uppercase tracking-[0.14em] font-semibold data-[state=active]:bg-orange-600 data-[state=active]:text-white"
+                  >
+                    Price Match
                   </TabsTrigger>
                 </TabsList>
 
@@ -183,6 +221,61 @@ export default function LeadForms() {
                     </>
                   )}
 
+                  {tab === "comparison" && (
+                    <>
+                      <Field label="Current Supplier" testid="field-supplier">
+                        <Input className={inputCls} value={state.current_supplier} onChange={up("current_supplier")} placeholder="e.g., Brand / Country" data-testid="input-supplier" />
+                      </Field>
+                      <Field label="Monthly Volume (sqm)" testid="field-monthly-volume">
+                        <Input className={inputCls} value={state.monthly_volume_sqm} onChange={up("monthly_volume_sqm")} placeholder="e.g., 5000 sqm" data-testid="input-monthly-volume" />
+                      </Field>
+                      <div className="sm:col-span-2" data-testid="field-file">
+                        <Label className="text-xs uppercase tracking-[0.14em] font-semibold text-slate-700">
+                          Upload Current PO / Invoice / Quote <span className="text-slate-400 normal-case tracking-normal">(optional · max 10MB)</span>
+                        </Label>
+                        <div className="mt-2">
+                          <input
+                            ref={fileRef}
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp,.xlsx,.xls,.csv,.doc,.docx"
+                            onChange={(e) => setFile(e.target.files?.[0] || null)}
+                            className="hidden"
+                            id="kdipl-file-input"
+                            data-testid="input-file"
+                          />
+                          {!file ? (
+                            <label
+                              htmlFor="kdipl-file-input"
+                              className="cursor-pointer flex items-center justify-center gap-3 border-2 border-dashed border-slate-300 hover:border-orange-600 hover:bg-orange-50/50 transition-colors py-8 text-slate-500"
+                              data-testid="file-dropzone"
+                            >
+                              <Upload size={18} />
+                              <span className="text-sm font-medium">Click to upload file</span>
+                              <span className="text-xs text-slate-400 hidden sm:inline">PDF · Image · XLSX · CSV</span>
+                            </label>
+                          ) : (
+                            <div className="flex items-center gap-3 border border-slate-300 bg-slate-50 px-4 py-3" data-testid="file-selected">
+                              <FileCheck2 size={18} className="text-green-600 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-slate-900 truncate">{file.name}</div>
+                                <div className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => { setFile(null); if (fileRef.current) fileRef.current.value = ""; }}
+                                className="p-1 hover:bg-slate-200"
+                                data-testid="file-remove-btn"
+                                aria-label="Remove file"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
                   <div className="sm:col-span-2">
                     <Field label="Message" testid="field-message">
                       <Textarea
@@ -207,6 +300,7 @@ export default function LeadForms() {
                       {tab === "sample" && "Send Sample Request"}
                       {tab === "quote" && "Request Quote"}
                       {tab === "distributor" && "Submit Application"}
+                      {tab === "comparison" && "Beat my current price"}
                     </button>
                     <p className="text-xs text-slate-500">
                       By submitting you agree to be contacted by KDIPL about this enquiry.
@@ -218,6 +312,7 @@ export default function LeadForms() {
                 <TabsContent value="sample" />
                 <TabsContent value="quote" />
                 <TabsContent value="distributor" />
+                <TabsContent value="comparison" />
               </Tabs>
             </div>
           </div>

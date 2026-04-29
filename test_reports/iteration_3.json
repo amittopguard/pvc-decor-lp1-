@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 3 — Price Match (comparison) lead magnet end-to-end testing. Backend pytest suite expanded from 24 → 35 tests, ALL PASS (100%). New comparison endpoint (POST /api/leads/comparison multipart), file upload validation (extension allow-list + 10MB cap), admin file download endpoint, stats including 'comparison' bucket, and CSV export with new fields current_supplier/monthly_volume_sqm — all verified. Frontend: Landing page now has 4 lead-form tabs (Sample/Quote/Distributor/Price Match — orange highlighted). Hero CTA 'Beat My Import Price' (hero-cta-savings) and Importers section CTA (importers-cta-pricematch) and price-match-banner-cta all correctly switch tab to 'comparison' (data-state=active confirmed) and scroll to #contact via window.kdiplOpenComparison(). Comparison form shows extra fields: input-supplier, input-monthly-volume, file dropzone. File upload UI works: dropzone → file-selected (filename + size + remove) → file-remove-btn clears. Submitted comparison form (no file) successfully and toast 'Got it. We'll send a price comparison within 24 hours.' showed; form reset correctly. Admin: stats-grid contains 5 cards including 'Price Match', filter row has 5 tabs (All/Sample/Quote/Distributor/Price Match). Lead detail dialog for a comparison lead with file shows 'Uploaded File' section, lead-file-meta and lead-file-download-btn (button) with the original filename 'admin-ui-2.pdf' visible. Resend remains gracefully skipped (RESEND_API_KEY empty). No regressions detected. Hero count-up from iteration 2 was previously fixed and continues to work.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_kdipl_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py POST /api/leads/comparison reads entire upload into memory before checking size. This works because the frontend client-side limits to 10MB-ish typical files, but a malicious client can stream a 1GB body and OOM the worker. Recommended: stream-read in chunks or rely on FastAPI's Starlette request.stream() with a running byte counter, or set Starlette body size limit at middleware level.",
+    "lead-file-download-btn is a <button> that triggers a fetch+blob download; this works but loses native browser progress UI for large files. Consider a plain <a href=\"/api/admin/leads/{id}/file?token=...\"> with token in query (or short-lived signed URL) for very large attachments. Acceptable for now since uploads are capped at 10MB.",
+    "Uploaded files are written to /app/backend/uploads on local disk — fine for single-pod dev, but lost on pod replacement and not shared across replicas. For prod, stream to S3/GCS or mount a persistent volume.",
+    "POST /api/leads and /api/leads/comparison return 200 instead of conventional 201 Created — minor REST quibble.",
+    "No virus/MIME sniffing on uploads; admin downloads with the trusted content_type from the upload. Fine for a sales tool but worth noting.",
+    "No rate limiting on either /api/leads or /api/leads/comparison endpoint — public endpoints without throttling are susceptible to spam (a 5-min window/IP cap or hCaptcha would help).",
+    "FileMeta does not store the upload timestamp separately; relies on Lead.created_at — acceptable.",
+    "tab-switching via global window.kdiplOpenComparison works only after the LeadForms component has mounted (it sets the function on render). Hero CTA still works because LeadForms is in the same render tree, but if LeadForms is ever lazy-loaded the cross-section CTAs would silently no-op. Consider lifting tab state into a context."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_kdipl_api.py (added TestComparisonLeads class — 11 new tests, updated stats test for new comparison bucket)",
+    "/app/test_reports/pytest/pytest_results.xml (regenerated — 35 passed)",
+    "/app/test_reports/iteration_3.json (created)"
+  ],
+  "success_rate": {"backend": "100% (35/35)", "frontend": "100%"},
+  "test_credentials": "Admin password: kdipl@admin2025 (from /app/memory/test_credentials.md). Resend key intentionally empty — graceful skip working.",
+  "seed_data_creation": "Test created several TEST_-prefixed comparison leads (with and without files) during testing. All TEST_ leads were cleaned up via DELETE /api/admin/leads/{id} both via the pytest test_zz_cleanup function and via in-browser admin token batch delete after UI testing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression: pytest /app/backend/tests/test_kdipl_api.py -v (35 tests, ~5s, expects REACT_APP_BACKEND_URL env). Comparison testids on landing: tab-comparison, input-supplier, input-monthly-volume, input-file, file-dropzone, file-selected, file-remove-btn, hero-cta-savings, importers-cta-pricematch, price-match-banner, price-match-banner-cta. Cross-section CTAs use window.kdiplOpenComparison() set on LeadForms render. Admin testids for new feature: stats-grid (now 5 children), lead-detail-dialog, lead-file-meta, lead-file-download-btn (button element, not anchor — uses fetch+blob). Filter tabs in admin are buttons whose text is 'All'/'Sample'/'Quote'/'Distributor'/'Price Match' — no dedicated filter-* testids; if needed for future automation, ask main agent to add. Lead detail dialog opens via row's last action-button → DropdownMenuItem 'View', NOT by clicking the row.",
+  "rca of the issue": "No bugs found in this iteration."
+}

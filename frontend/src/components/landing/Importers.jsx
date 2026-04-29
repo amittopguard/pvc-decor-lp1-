@@ -69,19 +69,44 @@ export default function Importers() {
         </div>
 
         <div className="mt-10 flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={() => window.kdiplOpenComparison && window.kdiplOpenComparison()}
+            data-testid="importers-cta-pricematch"
+            className="bg-orange-600 text-white px-8 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-orange-500 transition-colors text-center inline-flex items-center justify-center gap-2"
+          >
+            Upload Your Invoice &mdash; We Beat It
+          </button>
           <a
             href="#contact"
             data-testid="importers-cta-quote"
-            className="bg-orange-600 text-white px-8 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-orange-500 transition-colors text-center"
-          >
-            Get a Price Comparison
-          </a>
-          <a
-            href="#contact"
             className="border border-white/30 text-white px-8 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-white hover:text-slate-900 transition-colors text-center"
           >
             Request Samples
           </a>
+        </div>
+
+        {/* Price-match teaser card */}
+        <div
+          data-testid="price-match-banner"
+          className="mt-8 border border-orange-500/30 bg-orange-500/[0.06] p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center"
+        >
+          <div className="lg:col-span-8">
+            <div className="text-[10px] uppercase tracking-[0.28em] font-bold text-orange-400">
+              24-Hour Price Match Promise
+            </div>
+            <h3 className="mt-3 font-display font-bold text-2xl lg:text-3xl text-white leading-tight">
+              Send us your latest import invoice. We&rsquo;ll send a counter-quote in 24 hours &mdash; or tell you honestly that you&rsquo;re already getting a great deal.
+            </h3>
+          </div>
+          <div className="lg:col-span-4 flex lg:justify-end">
+            <button
+              onClick={() => window.kdiplOpenComparison && window.kdiplOpenComparison()}
+              data-testid="price-match-banner-cta"
+              className="bg-white text-slate-900 px-7 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-orange-600 hover:text-white transition-colors w-full lg:w-auto"
+            >
+              Upload Invoice &rarr;
+            </button>
+          </div>
         </div>
       </div>
     </section>
