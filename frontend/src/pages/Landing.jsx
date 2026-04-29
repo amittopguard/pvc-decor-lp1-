@@ -6,6 +6,7 @@ import Importers from "@/components/landing/Importers";
 import Manufacturers from "@/components/landing/Manufacturers";
 import Catalog from "@/components/landing/Catalog";
 import Trust from "@/components/landing/Trust";
+import Testimonials from "@/components/landing/Testimonials";
 import LeadForms from "@/components/landing/LeadForms";
 import Faq from "@/components/landing/Faq";
 import Footer from "@/components/landing/Footer";
