@@ -1,4 +1,5 @@
 import { Download, ArrowRight } from "lucide-react";
+import { track } from "@/lib/analytics";
 
 const CATALOG = [
   { name: "Walnut Grove", category: "Wood", code: "KD-W-102", img: "https://images.pexels.com/photos/9467701/pexels-photo-9467701.jpeg" },
@@ -13,6 +14,7 @@ const CATALOG = [
 
 export default function Catalog() {
   const handleDownload = () => {
+    track("catalog_download", { source: "catalog_section" });
     // Placeholder catalog download — opens WhatsApp to request catalog
     const msg = encodeURIComponent("Hi KDIPL, please send me the full PVC Decor Film & Laminate catalog.");
     window.open(`https://wa.me/919311342988?text=${msg}`, "_blank");

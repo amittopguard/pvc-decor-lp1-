@@ -1,4 +1,5 @@
 import { MessageCircle } from "lucide-react";
+import { track } from "@/lib/analytics";
 
 export default function WhatsAppFab() {
   const msg = encodeURIComponent("Hi KDIPL, I came from your website and would like to know more about your PVC products.");
@@ -7,6 +8,7 @@ export default function WhatsAppFab() {
       href={`https://wa.me/919311342988?text=${msg}`}
       target="_blank"
       rel="noreferrer"
+      onClick={() => track("whatsapp_click", { source: "fab" })}
       data-testid="whatsapp-fab"
       className="fixed bottom-6 right-6 z-50 group flex items-center gap-3"
       aria-label="Chat on WhatsApp"

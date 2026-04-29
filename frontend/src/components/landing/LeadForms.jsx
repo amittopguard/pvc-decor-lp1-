@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, API } from "@/lib/api";
+import { track } from "@/lib/analytics";
 import { Loader2, Send, Upload, FileCheck2, X } from "lucide-react";
 
 const initial = {
@@ -78,6 +79,9 @@ export default function LeadForms() {
         : tab === "comparison" ? "Got it. We'll send a price comparison within 24 hours."
         : "Sample request received. You'll hear from us soon."
       );
+      // Fire analytics conversion event
+      track(`${tab}_submit`, { lead_type: tab, has_file: tab === "comparison" && !!file });
+      track("lead_submit", { lead_type: tab });
       setState(initial);
       setFile(null);
       if (fileRef.current) fileRef.current.value = "";

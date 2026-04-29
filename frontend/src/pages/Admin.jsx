@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { adminApi, api, API } from "@/lib/api";
+import { track } from "@/lib/analytics";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +38,7 @@ function Login({ onSuccess }) {
     try {
       const { data } = await api.post("/admin/login", { password });
       localStorage.setItem("kdipl_admin_token", data.token);
+      track("admin_login");
       toast.success("Welcome back");
       onSuccess();
     } catch {
