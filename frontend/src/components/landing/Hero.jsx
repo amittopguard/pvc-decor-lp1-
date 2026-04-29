@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowUpRight, Sparkles, Truck, Globe, Factory } from "lucide-react";
 
 const AUDIENCES = [
@@ -15,10 +15,7 @@ const MARQUEE = [
 
 function useCountUp(end, durationMs = 1400, start = 0) {
   const [v, setV] = useState(start);
-  const ran = useRef(false);
   useEffect(() => {
-    if (ran.current) return;
-    ran.current = true;
     const t0 = performance.now();
     let raf = 0;
     const tick = (now) => {
