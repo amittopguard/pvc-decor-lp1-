@@ -164,38 +164,38 @@ function Dashboard({ onLogout }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50" data-testid="admin-dashboard">
+    <div className="min-h-screen bg-slate-50 overflow-x-hidden" data-testid="admin-dashboard">
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-slate-900 flex items-center justify-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 bg-slate-900 flex items-center justify-center shrink-0">
               <span className="text-orange-500 font-display font-bold text-lg">K</span>
             </div>
-            <div>
-              <div className="font-display font-bold text-slate-900">KDIPL Admin</div>
-              <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Lead Management</div>
+            <div className="min-w-0">
+              <div className="font-display font-bold text-slate-900 truncate">KDIPL Admin</div>
+              <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 truncate">Lead Management</div>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             <button
               onClick={downloadCsv}
               data-testid="export-csv-btn"
-              className="inline-flex items-center gap-2 text-xs uppercase tracking-wider font-semibold border border-slate-300 px-4 py-2.5 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-colors"
+              className="inline-flex items-center gap-2 text-xs uppercase tracking-wider font-semibold border border-slate-300 px-3 sm:px-4 py-2.5 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-colors"
             >
-              <Download size={14} /> Export CSV
+              <Download size={14} /> <span className="hidden sm:inline">Export CSV</span>
             </button>
             <button
               onClick={onLogout}
               data-testid="admin-logout-btn"
-              className="inline-flex items-center gap-2 text-xs uppercase tracking-wider font-semibold border border-slate-300 px-4 py-2.5 hover:bg-red-600 hover:text-white hover:border-red-600 transition-colors"
+              className="inline-flex items-center gap-2 text-xs uppercase tracking-wider font-semibold border border-slate-300 px-3 sm:px-4 py-2.5 hover:bg-red-600 hover:text-white hover:border-red-600 transition-colors"
             >
-              <LogOut size={14} /> Logout
+              <LogOut size={14} /> <span className="hidden sm:inline">Logout</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-10">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
         {stats && (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-10" data-testid="stats-grid">
             <StatCard label="Total Leads" value={stats.total} accent />
