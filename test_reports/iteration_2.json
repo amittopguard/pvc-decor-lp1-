@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 2 retest after Hero v3 rewrite. Backend pytest suite (24/24) all pass, no regressions. Frontend: New Hero renders with stamp 'Origin India · Seal 23/02', declarative copy stack (Imports are slow / And expensive / And, honestly / OPTIONAL.), 4 stat tiles (23+/800+/1500/Low MOQ), 3 audience pills routing correctly to #distributors/#importers/#manufacturers, CTAs route correctly (#contact + #importers), bottom marquee renders, WhatsApp FAB intact (wa.me/919311342988). Lead form submission still works (toast 'Sample request received' + form reset). Admin flow end-to-end works (login/dashboard/stats/table/type-filter/search/logout). HOWEVER — the count-up animation in the Hero proof tile is BROKEN: both the import-days (47) and KDIPL-days (5) numbers are stuck displaying '0' instead of animating to 47 and 5. Verified via DOM after 3.5s wait. Root cause is a React StrictMode double-invoke bug in useCountUp.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Hero / useCountUp hook",
+        "issue": "Count-up animation is stuck at 0 for both numbers in the proof tile. Final values 47 and 5 are never displayed (verified directly in DOM: ['0','0']). Hero content reads 'Days from PO → factory floor 0 Imported — sea 0 KDIPL — direct'. This makes the proof tile meaningless and breaks the hero's signature visual.",
+        "selector": "[data-testid='hero-proof-column'] .font-display.font-extrabold.text-6xl",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_kdipl_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix Hero useCountUp hook — currently stuck at 0 due to StrictMode double-invoke. The `ran.current` guard is set true on the first effect, then StrictMode unmounts and the cleanup `cancelAnimationFrame(raf)` cancels the only scheduled RAF; on the second mount `ran.current` is already true so the effect short-circuits and setV(end) is never called. Two safe fixes: (a) drop the ran.current guard entirely and rely on cleanup to cancel any in-flight RAF (idempotent because t0 resets on mount), or (b) on cleanup, also reset ran.current = false. Recommended fix: remove the ran.current ref and let the effect re-run with cleanup — RAF cancellation already handles re-entry."
+  ],
+  "critical_code_review_comments": [
+    "Hero.jsx useCountUp: ran.current ref + cleanup cancelAnimationFrame is incompatible with React.StrictMode — first mount schedules RAF, unmount cancels it, second mount skips because ran.current=true. Result: numbers stuck at start value (0). Must be retested after fix.",
+    "Hero.jsx: hidden 'KDIPL replaces them.' tagline uses `hidden sm:block` so on mobile it disappears entirely — acceptable but worth noting.",
+    "Hero.jsx imports lucide icons Truck/Globe/Factory/Sparkles/ArrowUpRight — bundle impact minimal, fine.",
+    "Existing review notes from iteration 1 still apply (no rate limiting on POST /api/leads, ADMIN_TOKEN_SECRET should rotate before prod, lead POST returns 200 not 201)."
+  ],
+  "updated_files": [
+    "/app/test_reports/iteration_2.json (created)",
+    "/app/test_reports/pytest/pytest_results.xml (regenerated)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "92%"},
+  "test_credentials": "Admin password: kdipl@admin2025 (from /app/memory/test_credentials.md). Resend key intentionally empty — graceful skip working.",
+  "seed_data_creation": "One TEST_PlayUser lead created via UI form during testing was deleted after admin verification. Backend pytest suite auto-cleans its TEST_ leads.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression: pytest /app/backend/tests/test_kdipl_api.py -v (24 tests, ~2s). Hero v3 testids: hero-section, hero-stamp, hero-audience-pills, hero-pill-{distributors|importers|manufacturers}, hero-cta-sample, hero-cta-savings, hero-proof-column. To verify count-up fix, after page load + ~2s wait read the two big numbers via: document.querySelectorAll('[data-testid=\"hero-proof-column\"] .font-display.font-extrabold.text-6xl') — they should be '47' and '5'. Currently both return '0'.",
+  "rca of the issue": "BUG: Hero count-up stuck at 0.\nReproduction: Open landing page → wait 2-3s → inspect proof tile (right side of hero). Both large numerals show 0 instead of animating 0→47 and 0→5.\nRoot cause: useCountUp hook in /app/frontend/src/components/landing/Hero.jsx lines 16-34 uses `const ran = useRef(false)` + `if (ran.current) return; ran.current = true;` to dedupe, AND the effect cleanup runs `cancelAnimationFrame(raf)`. Under React 18 StrictMode (default in dev), every effect runs mount→cleanup→mount. First mount: ran.current=true, schedules RAF. Cleanup: cancelAnimationFrame kills the only RAF. Second mount: short-circuits because ran.current is already true. Net: setV(end) never fires, value stays at start (0).\nMitigation: Remove the `ran.current` guard entirely (cleanup already handles cancellation idempotently — t0 just resets on remount which is harmless), OR reset ran.current=false in the cleanup function. Simpler patch:\n  useEffect(() => {\n    const t0 = performance.now();\n    let raf = 0;\n    const tick = (now) => { ... };\n    raf = requestAnimationFrame(tick);\n    return () => cancelAnimationFrame(raf);\n  }, [end, durationMs, start]);"
+}
