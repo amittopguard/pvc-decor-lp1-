@@ -7,3 +7,6 @@ bcrypt==4.1.3
 databases[aiomysql]==0.9.0
 aiomysql==0.2.0
 PyMySQL==1.1.1
+resend==2.14.0
+email-validator==2.3.0
+pydantic[email]==2.12.5

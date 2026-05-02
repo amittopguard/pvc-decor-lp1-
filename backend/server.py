@@ -564,32 +564,37 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    await database.connect()
-    # Create tables
-    await database.execute("""
-        CREATE TABLE IF NOT EXISTS leads (
-            id VARCHAR(255) PRIMARY KEY,
-            type VARCHAR(50),
-            status VARCHAR(50),
-            created_at VARCHAR(100),
-            data JSON
-        )
-    """)
-    await database.execute("""
-        CREATE TABLE IF NOT EXISTS cms_content (
-            id VARCHAR(255) PRIMARY KEY,
-            collection VARCHAR(100),
-            sort_order INT,
-            data JSON
-        )
-    """)
-    await database.execute("""
-        CREATE TABLE IF NOT EXISTS media (
-            id VARCHAR(255) PRIMARY KEY,
-            created_at VARCHAR(100),
-            data JSON
-        )
-    """)
+    try:
+        await database.connect()
+        # Create tables
+        await database.execute("""
+            CREATE TABLE IF NOT EXISTS leads (
+                id VARCHAR(255) PRIMARY KEY,
+                type VARCHAR(50),
+                status VARCHAR(50),
+                created_at VARCHAR(100),
+                data JSON
+            )
+        """)
+        await database.execute("""
+            CREATE TABLE IF NOT EXISTS cms_content (
+                id VARCHAR(255) PRIMARY KEY,
+                collection VARCHAR(100),
+                sort_order INT,
+                data JSON
+            )
+        """)
+        await database.execute("""
+            CREATE TABLE IF NOT EXISTS media (
+                id VARCHAR(255) PRIMARY KEY,
+                created_at VARCHAR(100),
+                data JSON
+            )
+        """)
+        logger.info("Database connected and tables ready")
+    except Exception as e:
+        logger.error(f"Database startup error: {e}")
+        logger.info("Server will start without DB — will retry on first request")
 
 @app.on_event("shutdown")
 async def shutdown():
