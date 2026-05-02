@@ -2,9 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, U
 from fastapi.responses import StreamingResponse, FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from databases import Database
-from starlette.requests import Request as StarletteRequest
-import urllib.parse
+from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import io
 import csv
@@ -13,7 +11,6 @@ import hashlib
 import base64
 import asyncio
 import logging
-import json
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Literal
@@ -25,12 +22,9 @@ import resend
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-db_pass = urllib.parse.quote_plus(os.environ.get('DB_PASS', ''))
-db_host = os.environ.get('DB_HOST', 'localhost')
-db_user = os.environ.get('DB_USER', 'root')
-db_name = os.environ.get('DB_NAME', 'test')
-mysql_url = f"mysql+aiomysql://{db_user}:{db_pass}@{db_host}/{db_name}"
-database = Database(mysql_url)
+mongo_url = os.environ['MONGO_URL']
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ['DB_NAME']]
 
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'kdipl@admin2025')
 ADMIN_SECRET = os.environ.get('ADMIN_TOKEN_SECRET', 'change-me')
@@ -41,9 +35,6 @@ LEAD_CC_EMAIL = os.environ.get('LEAD_CC_EMAIL', '')
 
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
-MEDIA_DIR = ROOT_DIR / "uploads" / "media"
-MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 ALLOWED_UPLOAD_EXT = {".pdf", ".jpg", ".jpeg", ".png", ".webp", ".xlsx", ".xls", ".csv", ".doc", ".docx"}
 
@@ -56,15 +47,18 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+
 # --------- Models ---------
-LeadType = Literal["sample", "quote", "distributor", "comparison", "catalogue"]
+LeadType = Literal["sample", "quote", "distributor", "comparison"]
 LeadStatus = Literal["new", "contacted", "qualified", "closed", "spam"]
+
 
 class FileMeta(BaseModel):
     filename: str
     stored: str
     size: int
     content_type: Optional[str] = None
+
 
 class LeadIn(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -84,27 +78,33 @@ class LeadIn(BaseModel):
     monthly_volume_sqm: Optional[str] = Field(default=None, max_length=80)
     message: Optional[str] = Field(default=None, max_length=2000)
 
+
 class Lead(LeadIn):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     status: LeadStatus = "new"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     file_meta: Optional[FileMeta] = None
 
+
 class LeadStatusUpdate(BaseModel):
     status: LeadStatus
 
+
 class AdminLogin(BaseModel):
     password: str
+
 
 # --------- Auth Helpers ---------
 def _sign(payload: str) -> str:
     sig = hmac.new(ADMIN_SECRET.encode(), payload.encode(), hashlib.sha256).digest()
     return base64.urlsafe_b64encode(sig).decode().rstrip("=")
 
+
 def create_token(hours: int = 24) -> str:
     exp = int((datetime.now(timezone.utc) + timedelta(hours=hours)).timestamp())
     payload = f"admin:{exp}"
     return f"{base64.urlsafe_b64encode(payload.encode()).decode().rstrip('=')}.{_sign(payload)}"
+
 
 def verify_token(token: str) -> bool:
     try:
@@ -118,12 +118,14 @@ def verify_token(token: str) -> bool:
     except Exception:
         return False
 
+
 async def require_admin(authorization: Optional[str] = Header(default=None)):
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="Missing token")
     if not verify_token(authorization.split(" ", 1)[1]):
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     return True
+
 
 # --------- Email ---------
 def _build_email_html(lead: Lead) -> str:
@@ -155,6 +157,7 @@ def _build_email_html(lead: Lead) -> str:
         '</div></div></div>'
     )
 
+
 async def send_lead_email(lead: Lead):
     if not RESEND_KEY:
         logger.info("RESEND_API_KEY not set — skipping email for lead %s", lead.id)
@@ -174,20 +177,23 @@ async def send_lead_email(lead: Lead):
     except Exception as e:
         logger.error("Email send failed for lead %s: %s", lead.id, str(e))
 
+
 # --------- Public Routes ---------
 @api_router.get("/")
 async def root():
     return {"service": "KDIPL Leads API", "status": "ok"}
+
 
 @api_router.post("/leads", response_model=Lead)
 async def create_lead(payload: LeadIn):
     lead = Lead(**payload.model_dump())
     doc = lead.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
-    await database.execute("INSERT INTO leads (id, type, status, created_at, data) VALUES (:id, :type, :status, :created_at, :data)", 
-        {"id": doc["id"], "type": doc["type"], "status": doc["status"], "created_at": doc["created_at"], "data": json.dumps(doc)})
+    await db.leads.insert_one(doc)
+    # Fire and forget email
     asyncio.create_task(send_lead_email(lead))
     return lead
+
 
 @api_router.post("/leads/comparison", response_model=Lead)
 async def create_comparison_lead(
@@ -233,10 +239,10 @@ async def create_comparison_lead(
     )
     doc = lead.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
-    await database.execute("INSERT INTO leads (id, type, status, created_at, data) VALUES (:id, :type, :status, :created_at, :data)", 
-        {"id": doc["id"], "type": doc["type"], "status": doc["status"], "created_at": doc["created_at"], "data": json.dumps(doc)})
+    await db.leads.insert_one(doc)
     asyncio.create_task(send_lead_email(lead))
     return lead
+
 
 # --------- Admin Routes ---------
 @api_router.post("/admin/login")
@@ -245,20 +251,23 @@ async def admin_login(body: AdminLogin):
         raise HTTPException(status_code=401, detail="Invalid password")
     return {"token": create_token(), "expires_in_hours": 24}
 
+
 @api_router.get("/admin/verify")
 async def admin_verify(_: bool = Depends(require_admin)):
     return {"ok": True}
 
+
 @api_router.get("/admin/stats")
 async def admin_stats(_: bool = Depends(require_admin)):
-    total = await database.fetch_val("SELECT COUNT(*) FROM leads")
+    total = await db.leads.count_documents({})
     by_type = {}
     by_status = {}
     for t in ["sample", "quote", "distributor", "comparison"]:
-        by_type[t] = await database.fetch_val("SELECT COUNT(*) FROM leads WHERE type = :t", {"t": t})
+        by_type[t] = await db.leads.count_documents({"type": t})
     for s in ["new", "contacted", "qualified", "closed", "spam"]:
-        by_status[s] = await database.fetch_val("SELECT COUNT(*) FROM leads WHERE status = :s", {"s": s})
+        by_status[s] = await db.leads.count_documents({"status": s})
     return {"total": total, "by_type": by_type, "by_status": by_status}
+
 
 @api_router.get("/admin/leads")
 async def admin_list_leads(
@@ -268,53 +277,40 @@ async def admin_list_leads(
     q: Optional[str] = None,
     limit: int = Query(200, le=1000),
 ):
-    query = "SELECT data FROM leads"
-    conditions = []
-    params = {}
+    query: dict = {}
     if type:
-        conditions.append("type = :type")
-        params["type"] = type
+        query["type"] = type
     if status:
-        conditions.append("status = :status")
-        params["status"] = status
+        query["status"] = status
     if q:
-        conditions.append("(LOWER(JSON_EXTRACT(data, '$.name')) LIKE :q OR LOWER(JSON_EXTRACT(data, '$.company')) LIKE :q OR LOWER(JSON_EXTRACT(data, '$.email')) LIKE :q OR LOWER(JSON_EXTRACT(data, '$.phone')) LIKE :q)")
-        params["q"] = f"%{q.lower()}%"
-    
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-    query += " ORDER BY created_at DESC LIMIT :limit"
-    params["limit"] = limit
-
-    rows = await database.fetch_all(query, params)
-    leads = [json.loads(r["data"]) for r in rows]
+        rx = {"$regex": q, "$options": "i"}
+        query["$or"] = [{"name": rx}, {"company": rx}, {"email": rx}, {"phone": rx}, {"country": rx}]
+    cursor = db.leads.find(query, {"_id": 0}).sort("created_at", -1).limit(limit)
+    leads = await cursor.to_list(length=limit)
     return {"items": leads, "count": len(leads)}
+
 
 @api_router.patch("/admin/leads/{lead_id}")
 async def admin_update_lead(lead_id: str, body: LeadStatusUpdate, _: bool = Depends(require_admin)):
-    # Fetch lead
-    row = await database.fetch_one("SELECT data FROM leads WHERE id = :id", {"id": lead_id})
-    if not row:
+    result = await db.leads.update_one({"id": lead_id}, {"$set": {"status": body.status}})
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Lead not found")
-    
-    doc = json.loads(row["data"])
-    doc["status"] = body.status
-    
-    await database.execute("UPDATE leads SET status = :status, data = :data WHERE id = :id", 
-        {"status": body.status, "data": json.dumps(doc), "id": lead_id})
-    return doc
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    return lead
+
 
 @api_router.delete("/admin/leads/{lead_id}")
 async def admin_delete_lead(lead_id: str, _: bool = Depends(require_admin)):
-    res = await database.execute("DELETE FROM leads WHERE id = :id", {"id": lead_id})
-    if not res:
+    result = await db.leads.delete_one({"id": lead_id})
+    if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Lead not found")
     return {"ok": True}
 
+
 @api_router.get("/admin/leads/export.csv")
 async def admin_export_csv(_: bool = Depends(require_admin)):
-    rows = await database.fetch_all("SELECT data FROM leads ORDER BY created_at DESC LIMIT 5000")
-    leads = [json.loads(r["data"]) for r in rows]
+    cursor = db.leads.find({}, {"_id": 0}).sort("created_at", -1)
+    leads = await cursor.to_list(length=5000)
     buf = io.StringIO()
     fields = [
         "created_at", "type", "status", "name", "company", "email", "phone",
@@ -333,12 +329,12 @@ async def admin_export_csv(_: bool = Depends(require_admin)):
         headers={"Content-Disposition": f'attachment; filename="kdipl-leads-{datetime.now(timezone.utc).strftime("%Y%m%d")}.csv"'},
     )
 
+
 @api_router.get("/admin/leads/{lead_id}/file")
 async def admin_download_lead_file(lead_id: str, _: bool = Depends(require_admin)):
-    row = await database.fetch_one("SELECT data FROM leads WHERE id = :id", {"id": lead_id})
-    if not row:
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
-    lead = json.loads(row["data"])
     fm = lead.get("file_meta")
     if not fm or not fm.get("stored"):
         raise HTTPException(status_code=404, detail="No file attached")
@@ -351,27 +347,34 @@ async def admin_download_lead_file(lead_id: str, _: bool = Depends(require_admin
         media_type=fm.get("content_type") or "application/octet-stream",
     )
 
+
 # --------- CMS Content Routes ---------
 CMS_COLLECTIONS = [
     "branding", "hero", "products", "categories", "audience",
     "trust", "faq", "testimonials", "seo_settings", "contact",
 ]
 
+# Public: fetch content (no auth)
 @api_router.get("/content/{collection}")
 async def get_content(collection: str):
     if collection not in CMS_COLLECTIONS:
         raise HTTPException(status_code=404, detail="Unknown collection")
-    rows = await database.fetch_all("SELECT data FROM cms_content WHERE collection = :c ORDER BY sort_order ASC", {"c": collection})
-    items = [json.loads(r["data"]) for r in rows]
+    items = await db[f"cms_{collection}"].find({}, {"_id": 0}).sort("sort_order", 1).to_list(500)
     return {"items": items}
 
+
+# Admin: list content
 @api_router.get("/admin/content/{collection}")
 async def admin_list_content(collection: str, _: bool = Depends(require_admin)):
     if collection not in CMS_COLLECTIONS:
         raise HTTPException(status_code=404, detail="Unknown collection")
-    rows = await database.fetch_all("SELECT data FROM cms_content WHERE collection = :c ORDER BY sort_order ASC", {"c": collection})
-    items = [json.loads(r["data"]) for r in rows]
+    items = await db[f"cms_{collection}"].find({}, {"_id": 0}).sort("sort_order", 1).to_list(500)
     return {"items": items}
+
+
+# Flexible create/update using raw body
+from starlette.requests import Request as StarletteRequest
+import json as json_lib
 
 @api_router.post("/admin/content/{collection}/item")
 async def admin_create_item(collection: str, request: StarletteRequest, _: bool = Depends(require_admin)):
@@ -381,12 +384,12 @@ async def admin_create_item(collection: str, request: StarletteRequest, _: bool 
     item_id = body.get("id") or str(uuid.uuid4())
     body["id"] = item_id
     if "sort_order" not in body:
-        count = await database.fetch_val("SELECT COUNT(*) FROM cms_content WHERE collection = :c", {"c": collection})
-        body["sort_order"] = count or 0
+        count = await db[f"cms_{collection}"].count_documents({})
+        body["sort_order"] = count
     body["updated_at"] = datetime.now(timezone.utc).isoformat()
-    await database.execute("INSERT INTO cms_content (id, collection, sort_order, data) VALUES (:id, :c, :s, :data)", 
-        {"id": item_id, "c": collection, "s": body["sort_order"], "data": json.dumps(body)})
+    await db[f"cms_{collection}"].insert_one({**body, "_id": item_id})
     return {"ok": True, "id": item_id}
+
 
 @api_router.put("/admin/content/{collection}/item/{item_id}")
 async def admin_update_item(collection: str, item_id: str, request: StarletteRequest, _: bool = Depends(require_admin)):
@@ -394,22 +397,22 @@ async def admin_update_item(collection: str, item_id: str, request: StarletteReq
         raise HTTPException(status_code=404, detail="Unknown collection")
     body = await request.json()
     body["updated_at"] = datetime.now(timezone.utc).isoformat()
-    # Keep ID the same
-    body["id"] = item_id
-    res = await database.execute("UPDATE cms_content SET data = :data, sort_order = :s WHERE id = :id AND collection = :c", 
-        {"data": json.dumps(body), "s": body.get("sort_order", 0), "id": item_id, "c": collection})
-    if not res:
+    body.pop("_id", None)
+    result = await db[f"cms_{collection}"].update_one({"id": item_id}, {"$set": body})
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"ok": True}
+
 
 @api_router.delete("/admin/content/{collection}/item/{item_id}")
 async def admin_delete_item(collection: str, item_id: str, _: bool = Depends(require_admin)):
     if collection not in CMS_COLLECTIONS:
         raise HTTPException(status_code=404, detail="Unknown collection")
-    res = await database.execute("DELETE FROM cms_content WHERE id = :id AND collection = :c", {"id": item_id, "c": collection})
-    if not res:
+    result = await db[f"cms_{collection}"].delete_one({"id": item_id})
+    if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"ok": True}
+
 
 @api_router.put("/admin/content/{collection}/reorder")
 async def admin_reorder(collection: str, request: StarletteRequest, _: bool = Depends(require_admin)):
@@ -418,14 +421,13 @@ async def admin_reorder(collection: str, request: StarletteRequest, _: bool = De
     body = await request.json()
     ids = body.get("ids", [])
     for i, item_id in enumerate(ids):
-        # Update sort_order in column and JSON
-        row = await database.fetch_one("SELECT data FROM cms_content WHERE id = :id AND collection = :c", {"id": item_id, "c": collection})
-        if row:
-            doc = json.loads(row["data"])
-            doc["sort_order"] = i
-            await database.execute("UPDATE cms_content SET sort_order = :s, data = :data WHERE id = :id", 
-                {"s": i, "data": json.dumps(doc), "id": item_id})
+        await db[f"cms_{collection}"].update_one({"id": item_id}, {"$set": {"sort_order": i}})
     return {"ok": True}
+
+
+# --------- Media Library ---------
+MEDIA_DIR = ROOT_DIR / "uploads" / "media"
+MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 @api_router.post("/admin/media/upload")
 async def admin_upload_media(file: UploadFile = File(...), _: bool = Depends(require_admin)):
@@ -442,6 +444,7 @@ async def admin_upload_media(file: UploadFile = File(...), _: bool = Depends(req
     orig_path = MEDIA_DIR / orig_name
     orig_path.write_bytes(contents)
 
+    # Try webp conversion
     webp_url = None
     try:
         from PIL import Image as PILImage
@@ -452,7 +455,7 @@ async def admin_upload_media(file: UploadFile = File(...), _: bool = Depends(req
             img.save(str(webp_path), "WEBP", quality=82)
             webp_url = f"/api/media/{webp_name}"
     except ImportError:
-        pass
+        pass  # Pillow not installed, skip webp
     except Exception as e:
         logger.warning("WebP conversion failed: %s", e)
 
@@ -466,32 +469,34 @@ async def admin_upload_media(file: UploadFile = File(...), _: bool = Depends(req
         "webp_url": webp_url,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    await database.execute("INSERT INTO media (id, created_at, data) VALUES (:id, :created_at, :data)", 
-        {"id": file_id, "created_at": media_doc["created_at"], "data": json.dumps(media_doc)})
+    await db.media.insert_one({**media_doc, "_id": file_id})
     return media_doc
+
 
 @api_router.get("/admin/media")
 async def admin_list_media(_: bool = Depends(require_admin)):
-    rows = await database.fetch_all("SELECT data FROM media ORDER BY created_at DESC")
-    items = [json.loads(r["data"]) for r in rows]
+    items = await db.media.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
     return {"items": items}
+
 
 @api_router.delete("/admin/media/{media_id}")
 async def admin_delete_media(media_id: str, _: bool = Depends(require_admin)):
-    row = await database.fetch_one("SELECT data FROM media WHERE id = :id", {"id": media_id})
-    if not row:
+    doc = await db.media.find_one({"id": media_id})
+    if not doc:
         raise HTTPException(status_code=404, detail="Not found")
-    doc = json.loads(row["data"])
     for key in ["stored"]:
         p = MEDIA_DIR / doc.get(key, "")
         if p.exists():
             p.unlink()
+    # Also delete webp
     webp_p = MEDIA_DIR / f"{media_id}.webp"
     if webp_p.exists():
         webp_p.unlink()
-    await database.execute("DELETE FROM media WHERE id = :id", {"id": media_id})
+    await db.media.delete_one({"id": media_id})
     return {"ok": True}
 
+
+# Serve media files (public)
 @api_router.get("/media/{filename}")
 async def serve_media(filename: str):
     path = MEDIA_DIR / filename
@@ -500,18 +505,22 @@ async def serve_media(filename: str):
     ct = "image/webp" if filename.endswith(".webp") else "application/octet-stream"
     return FileResponse(path, media_type=ct)
 
+
+# --------- Seed Default Content ---------
 @api_router.post("/admin/seed")
 async def admin_seed(_: bool = Depends(require_admin)):
+    """Seed CMS collections with default content from the hardcoded landing page data."""
     seeded = []
+
+    # Only seed if collection is empty
     async def seed_if_empty(name, items):
-        count = await database.fetch_val("SELECT COUNT(*) FROM cms_content WHERE collection = :c", {"c": name})
+        count = await db[f"cms_{name}"].count_documents({})
         if count == 0:
             for i, item in enumerate(items):
                 item["id"] = item.get("id") or str(uuid.uuid4())
                 item["sort_order"] = i
                 item["updated_at"] = datetime.now(timezone.utc).isoformat()
-                await database.execute("INSERT INTO cms_content (id, collection, sort_order, data) VALUES (:id, :c, :s, :data)", 
-                    {"id": item["id"], "c": name, "s": i, "data": json.dumps(item)})
+                await db[f"cms_{name}"].insert_one({**item, "_id": item["id"]})
             seeded.append(name)
 
     await seed_if_empty("branding", [{"brand_name": "TopDecor", "legal_name": "Kiana Decor India Pvt Ltd", "tagline": "Sajao Bharat, Badhao Bharat", "logo_url": "/logo.png", "favicon_url": "/favicon.png", "og_image_url": "/og-image.jpg"}])
@@ -552,6 +561,7 @@ async def admin_seed(_: bool = Depends(require_admin)):
 
     return {"seeded": seeded}
 
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -562,36 +572,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
-async def startup():
-    await database.connect()
-    # Create tables
-    await database.execute("""
-        CREATE TABLE IF NOT EXISTS leads (
-            id VARCHAR(255) PRIMARY KEY,
-            type VARCHAR(50),
-            status VARCHAR(50),
-            created_at VARCHAR(100),
-            data JSON
-        )
-    """)
-    await database.execute("""
-        CREATE TABLE IF NOT EXISTS cms_content (
-            id VARCHAR(255) PRIMARY KEY,
-            collection VARCHAR(100),
-            sort_order INT,
-            data JSON
-        )
-    """)
-    await database.execute("""
-        CREATE TABLE IF NOT EXISTS media (
-            id VARCHAR(255) PRIMARY KEY,
-            created_at VARCHAR(100),
-            data JSON
-        )
-    """)
 
 @app.on_event("shutdown")
-async def shutdown():
-    await database.disconnect()
-
+async def shutdown_db_client():
+    client.close()

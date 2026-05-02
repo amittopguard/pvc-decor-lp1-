@@ -18,8 +18,12 @@ export default function Importers() {
       className="relative py-20 sm:py-32 bg-slate-950 text-white overflow-hidden noise-layer"
     >
       <img
-        src="https://images.unsplash.com/photo-1586528116311-ad8ed7c826b5?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwxfHxzaGlwcGluZyUyMGNhcmdvJTIwY29udGFpbmVycyUyMGxvZ2lzdGljc3xlbnwwfHx8fDE3NzczMTE4NjR8MA&ixlib=rb-4.1.0&q=85"
+        src="/images/shipping-containers.jpg"
         alt="Shipping containers logistics"
+        width={1200}
+        height={800}
+        loading="lazy"
+        decoding="async"
         className="absolute right-0 top-0 w-1/2 h-full object-cover opacity-15 hidden lg:block"
       />
       <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/95 to-transparent hidden lg:block" />
@@ -28,10 +32,10 @@ export default function Importers() {
         <div className="max-w-3xl">
           <div className="overline" style={{ color: "#fb923c" }}>03 &mdash; For Importers</div>
           <h2 className="mt-3 font-display font-bold text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-[1.05]">
-            Stop paying for <span className="text-orange-500">freight, duty, and delay.</span>
+            Stop paying for <span className="text-orange-500">freight, duty and delays.</span>
           </h2>
           <p className="mt-6 text-slate-300 text-lg leading-relaxed">
-            If you currently import PVC decor films or laminates from China, Korea, or SE&nbsp;Asia — there is a simpler, faster and cheaper path. Manufactured in India, shipped locally or to your port.
+            If you currently import PVC decor films from china— there is a simpler, faster and cheaper path. Manufactured in India, shipped locally or to your port.
           </p>
         </div>
 
@@ -42,7 +46,7 @@ export default function Importers() {
                 <th className="p-5 text-[11px] uppercase tracking-[0.2em] text-slate-400 font-bold">Parameter</th>
                 <th className="p-5 text-[11px] uppercase tracking-[0.2em] text-slate-400 font-bold">Imported Supply</th>
                 <th className="p-5 text-[11px] uppercase tracking-[0.2em] text-orange-400 font-bold border-l border-slate-700 bg-slate-900">
-                  KDIPL &mdash; Direct
+                  Factory Direct
                 </th>
               </tr>
             </thead>

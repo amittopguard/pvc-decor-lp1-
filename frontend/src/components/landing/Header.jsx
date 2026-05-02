@@ -6,7 +6,7 @@ const NAV = [
   { href: "#products", label: "Products" },
   { href: "#distributors", label: "Distributors" },
   { href: "#importers", label: "Importers" },
-  { href: "#catalog", label: "Catalog" },
+  { href: "#catalog", label: "Catalogue" },
   { href: "#contact", label: "Contact" },
 ];
 
@@ -30,7 +30,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
         <a href="#top" data-testid="logo-link" className="flex items-center gap-2.5">
           <div className="w-9 h-9 bg-slate-900 flex items-center justify-center">
-            <span className="text-orange-500 font-display font-bold text-lg tracking-tight">K</span>
+            <span className="text-orange-500 font-display font-bold text-lg tracking-tight">T</span>
           </div>
           <div className="leading-tight">
             <div className="font-display font-bold text-slate-900 text-lg">{KDIPL.company}</div>

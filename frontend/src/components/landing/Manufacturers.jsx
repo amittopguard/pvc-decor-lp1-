@@ -1,7 +1,7 @@
 import { Hammer, ShieldCheck, Repeat2, Ruler } from "lucide-react";
 
 const POINTS = [
-  { icon: Ruler, title: "Consistent Specs", body: "Every roll and sheet to specification — thickness, gloss, colour." },
+  { icon: Ruler, title: "Spec-Matched Supply", body: "Every roll and sheet to specification — thickness, gloss, colour." },
   { icon: ShieldCheck, title: "QC on Every Batch", body: "In-house lab testing before dispatch. No surprises on your line." },
   { icon: Repeat2, title: "Repeat Production", body: "We keep patterns alive — reorder the exact same design, reliably." },
   { icon: Hammer, title: "Built for Press Shops", body: "Tuned for vacuum-press membrane doors and rigid laminate applications." },
@@ -22,7 +22,7 @@ export default function Manufacturers() {
               Door &amp; furniture makers — your consistent supply partner.
             </h2>
             <p className="mt-6 text-slate-600 text-lg leading-relaxed">
-              If your line consumes PVC decor film or laminate daily, you already know the pain of inconsistent imports. KDIPL replaces that with predictable, local, spec-matched supply.
+              If your line consumes PVC decor film daily, you already know the pain of inconsistent imports. TopDecor replaces that with predictable, local, specs-matched supply.
             </p>
 
             <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -47,15 +47,19 @@ export default function Manufacturers() {
           <div className="relative">
             <div className="aspect-[4/5] overflow-hidden border border-slate-200">
               <img
-                src="https://images.unsplash.com/photo-1759262151165-3330c14fd982"
+                src="/images/pvc-decor-film.jpg"
                 alt="PVC membrane door finished premium"
+                width={640}
+                height={800}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
               />
             </div>
             <div className="absolute -bottom-6 -left-6 bg-slate-900 text-white p-6 w-56 hidden md:block">
               <div className="text-[10px] uppercase tracking-[0.22em] text-orange-400 font-bold">Process</div>
               <div className="mt-2 font-display text-xl font-semibold leading-tight">Vacuum Press tested</div>
-              <div className="mt-1 text-xs text-slate-400">1500mm+ film widths</div>
+              <div className="mt-1 text-xs text-slate-400">1350 mm Max Film Width</div>
             </div>
           </div>
         </div>

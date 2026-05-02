@@ -4,7 +4,7 @@ const BENEFITS = [
   { icon: MapPin, title: "Territory Exclusivity", body: "Lock your region and grow with dedicated support." },
   { icon: TrendingUp, title: "Distributor Margins", body: "Competitive slabs that reward volume and loyalty." },
   { icon: Truck, title: "Consistent Supply", body: "23 years of production discipline — on time, every month." },
-  { icon: CheckCircle2, title: "Co-Marketing Kit", body: "Catalog, digital assets, sample books and POS support." },
+  { icon: CheckCircle2, title: "Co-Marketing Kit", body: "Catalogue, digital assets, sample books and POS support." },
 ];
 
 export default function Distributors() {

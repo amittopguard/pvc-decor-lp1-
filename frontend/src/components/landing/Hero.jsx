@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Sparkles, Truck, Globe, Factory } from "lucide-react";
+import { fetchCMSSingle } from "@/lib/cms";
 
-const AUDIENCES = [
+const ICON_MAP = { Truck, Globe, Factory };
+
+const AUDIENCES_FALLBACK = [
   { id: "distributors", label: "Distributor", icon: Truck, target: "#distributors" },
   { id: "importers", label: "Importer", icon: Globe, target: "#importers" },
   { id: "manufacturers", label: "Manufacturer", icon: Factory, target: "#manufacturers" },
 ];
 
 const MARQUEE = [
-  "PVC Decor Film", "Vacuum Press Ready", "Laminate 1 mm", "Laminate 3 mm",
+  "PVC Decor Film", "Vacuum Press Ready", "Acrylic Sheets",
   "Pan-India Dispatch", "Custom Prints", "Low MOQ", "Export Documentation",
   "Walnut · Marble · Solid", "23 Years In The Press",
 ];
@@ -33,6 +36,33 @@ function useCountUp(end, durationMs = 1400, start = 0) {
 export default function Hero() {
   const days = useCountUp(5, 1600);
   const importDays = useCountUp(47, 1600);
+  const [hero, setHero] = useState(null);
+  const [audiences, setAudiences] = useState(AUDIENCES_FALLBACK);
+
+  useEffect(() => {
+    fetchCMSSingle("hero").then((d) => { if (d) setHero(d); });
+    import("@/lib/cms").then(({ fetchCMS }) => {
+      fetchCMS("audience").then((items) => {
+        if (items && items.length > 0) {
+          setAudiences(items.map((a) => ({
+            id: a.audience_id || a.id,
+            label: a.label,
+            icon: ICON_MAP[a.icon] || Truck,
+            target: a.target || "#contact",
+          })));
+        }
+      });
+    });
+  }, []);
+
+  // Fallback values
+  const headline = hero?.headline || "Imports are slow.";
+  const subHeadline = hero?.sub_headline || "And expensive. And, honestly —";
+  const twistLine = hero?.twist_line || "OPTIONAL.";
+  const description = hero?.description || "We manufacture PVC Decor Film for Membrane Door and Acrylic Sheets. From our floor to yours.";
+  const ctaText = hero?.cta_text || "Get a Free Sample Box";
+  const ctaLink = hero?.cta_link || "#contact";
+  const cta2Text = hero?.cta2_text || "Beat My Import Price";
 
   return (
     <section
@@ -40,6 +70,9 @@ export default function Hero() {
       data-testid="hero-section"
       className="relative bg-slate-950 text-white overflow-hidden noise-layer pt-28 pb-0"
     >
+      {/* SEO: single h1 for the page */}
+      <h1 className="sr-only">TopDecor — PVC Decor Film for Membrane Doors</h1>
+
       {/* Backdrop layers */}
       <div className="absolute inset-0 kdipl-grid-bg opacity-[0.06]" aria-hidden />
       <div
@@ -64,41 +97,43 @@ export default function Hero() {
           <div className="flex items-center gap-3 fade-up">
             <span className="w-8 h-px bg-orange-500" />
             <span className="text-[10px] uppercase tracking-[0.3em] font-bold text-orange-400">
-              KDIPL &middot; Manufacturer &middot; Since 2002
+              TopDecor &middot; Manufacturer &middot; Since 2002
             </span>
           </div>
 
           {/* The stab — declarative stacked lines */}
           <div className="mt-8 font-display font-extrabold tracking-tight leading-[0.92] fade-up">
             <div className="text-white text-5xl sm:text-7xl lg:text-[6rem]">
-              Imports are slow.
+              {headline}
             </div>
             <div className="text-slate-400 text-3xl sm:text-5xl lg:text-7xl mt-3 sm:mt-4 pl-4 sm:pl-12 lg:pl-24">
-              And expensive.
+              {subHeadline.split("—")[0]}
             </div>
-            <div className="text-slate-500 text-xl sm:text-3xl lg:text-4xl mt-3 sm:mt-4 pl-8 sm:pl-24 lg:pl-48">
-              And, honestly &mdash;
-            </div>
+            {subHeadline.includes("—") && (
+              <div className="text-slate-500 text-xl sm:text-3xl lg:text-4xl mt-3 sm:mt-4 pl-8 sm:pl-24 lg:pl-48">
+                And, honestly &mdash;
+              </div>
+            )}
 
             {/* The twist — full bleed orange line with a flicker */}
             <div className="mt-5 sm:mt-7 relative">
               <div className="text-orange-500 text-6xl sm:text-7xl lg:text-[7.5rem] leading-none tracking-tight">
-                OPTIONAL.
+                {twistLine}
               </div>
               <span className="absolute -top-2 -right-2 sm:top-0 sm:right-2 lg:top-2 lg:right-6 text-[10px] uppercase tracking-[0.28em] font-bold text-orange-300 hidden sm:block">
-                ____ KDIPL replaces them.
+                ____ TopDecor replaces them.
               </span>
             </div>
           </div>
 
           {/* Twist sub-line */}
-          <p className="mt-8 text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl fade-up">
-            We press <strong className="text-white font-semibold">PVC Decor Film</strong> for membrane doors and now <strong className="text-white font-semibold">PVC Laminates 1&nbsp;mm &amp; 3&nbsp;mm</strong> for acrylic sheets. From our floor to yours &mdash; <span className="text-orange-400 font-semibold">in five days, not fifty.</span>
-          </p>
+          <p className="mt-8 text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl fade-up"
+            dangerouslySetInnerHTML={{ __html: description.replace(/PVC Decor Film/g, '<strong class="text-white font-semibold">PVC Decor Film</strong>').replace(/PVC Laminates/g, '<strong class="text-white font-semibold">PVC Laminates</strong>') }}
+          />
 
           {/* Audience pills */}
           <div className="mt-8 flex flex-wrap gap-2.5 fade-up" data-testid="hero-audience-pills">
-            {AUDIENCES.map((a) => (
+            {audiences.map((a) => (
               <a
                 key={a.id}
                 href={a.target}
@@ -115,18 +150,18 @@ export default function Hero() {
           {/* Primary CTAs */}
           <div className="mt-8 flex flex-col sm:flex-row gap-3 fade-up">
             <a
-              href="#contact"
+              href={ctaLink}
               data-testid="hero-cta-sample"
               className="group bg-orange-600 text-white px-8 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-orange-500 transition-all duration-200 inline-flex items-center justify-center gap-2"
             >
-              <Sparkles size={16} /> Get a Free Sample Box
+              <Sparkles size={16} /> {ctaText}
             </a>
             <button
               onClick={() => window.kdiplOpenComparison && window.kdiplOpenComparison()}
               data-testid="hero-cta-savings"
               className="border border-white/25 text-white bg-transparent px-8 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-white hover:text-slate-900 transition-all duration-200 inline-flex items-center justify-center gap-2"
             >
-              Beat My Import Price
+              {cta2Text}
               <ArrowUpRight size={16} />
             </button>
           </div>
@@ -156,7 +191,7 @@ export default function Hero() {
                   {days}
                 </div>
                 <div className="text-[10px] uppercase tracking-[0.22em] text-orange-300 font-bold mt-3">
-                  KDIPL &mdash; direct
+                  Factory Direct
                 </div>
               </div>
             </div>
@@ -171,7 +206,7 @@ export default function Hero() {
             {[
               { v: "23+", l: "Years pressing" },
               { v: "800+", l: "Designs" },
-              { v: "1500", l: "mm max width" },
+              { v: "1350", l: "mm max width" },
               { v: "Low", l: "MOQ" },
             ].map((s, i) => (
               <div key={i} className="bg-slate-950/80 p-5">

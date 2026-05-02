@@ -1,0 +1,9 @@
+{
+  "rewrites": [
+    { "source": "/PVC-LP1/(.*)", "destination": "/PVC-LP1/index.html" },
+    { "source": "/PVC-LP1", "destination": "/PVC-LP1/index.html" }
+  ],
+  "buildCommand": "cd frontend && npm install --legacy-peer-deps && npm run build",
+  "outputDirectory": "frontend/build",
+  "framework": null
+}

@@ -1,11 +1,28 @@
-const STEPS = [
+import { useEffect, useState } from "react";
+import { fetchCMS } from "@/lib/cms";
+
+const STEPS_FALLBACK = [
   { n: "01", title: "Raw Material QC", body: "Sourced PVC and additives tested for tensile, gloss and colour stability." },
   { n: "02", title: "Printing & Coating", body: "High-definition texture printing with protective top coats for durability." },
-  { n: "03", title: "Vacuum Press / Lamination", body: "Industrial presses for films; precision pressing for 1mm & 3mm laminates." },
+  { n: "03", title: "In-house Lab Testing", body: "In-house lab for batch-to-batch thickness consistency." },
   { n: "04", title: "Inspection & Dispatch", body: "Batch-wise QC, roll/sheet labelling, and secure freight-ready packaging." },
 ];
 
 export default function Trust() {
+  const [steps, setSteps] = useState(STEPS_FALLBACK);
+
+  useEffect(() => {
+    fetchCMS("trust").then((items) => {
+      if (items && items.length > 0) {
+        setSteps(items.map((s, i) => ({
+          n: s.step || String(i + 1).padStart(2, "0"),
+          title: s.title,
+          body: s.body,
+        })));
+      }
+    });
+  }, []);
+
   return (
     <section data-testid="trust-section" className="py-20 sm:py-32 bg-white">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
@@ -22,7 +39,7 @@ export default function Trust() {
             <div className="mt-10 grid grid-cols-2 gap-5 border-t border-slate-200 pt-8">
               {[
                 { v: "23+", l: "Years Industry" },
-                { v: "1500mm", l: "Max Film Width" },
+                { v: "1350mm", l: "Max Film Width" },
                 { v: "100%", l: "Batch QC" },
                 { v: "Pan-India", l: "Distribution" },
               ].map((s, i) => (
@@ -36,7 +53,7 @@ export default function Trust() {
 
           <div className="lg:col-span-8">
             <ol className="space-y-5">
-              {STEPS.map((s, i) => (
+              {steps.map((s, i) => (
                 <li
                   key={i}
                   className="group border border-slate-200 p-7 lg:p-9 flex flex-col sm:flex-row sm:items-center gap-5 hover:border-slate-900 transition-colors"

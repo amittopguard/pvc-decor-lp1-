@@ -1,36 +1,32 @@
+import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
+import { fetchCMS } from "@/lib/cms";
 
-const PRODUCTS = [
-  {
-    tag: "Flagship",
-    title: "PVC Decor Film",
-    subtitle: "For PVC Membrane Doors",
-    process: "Vacuum Press Process",
-    points: ["3D wrap ready", "Scratch & moisture resistant", "Wide design library", "Custom print runs"],
-    image: "https://images.unsplash.com/photo-1759262151165-3330c14fd982",
-    accent: "bg-orange-600",
-  },
-  {
-    tag: "New Launch",
-    title: "PVC Laminate 1 mm",
-    subtitle: "For Acrylic Sheets & Panels",
-    process: "Pressed & Polished",
-    points: ["High-gloss finish", "UV stable", "Easy to fabricate", "Uniform thickness"],
-    image: "https://images.pexels.com/photos/9467701/pexels-photo-9467701.jpeg",
-    accent: "bg-slate-900",
-  },
-  {
-    tag: "New Launch",
-    title: "PVC Laminate 3 mm",
-    subtitle: "Rigid Decorative Sheets",
-    process: "Pressed & Polished",
-    points: ["Structural thickness", "Textured & solid ranges", "Cut-to-size", "Contract pricing"],
-    image: "https://images.pexels.com/photos/3847494/pexels-photo-3847494.jpeg",
-    accent: "bg-slate-900",
-  },
+const PRODUCTS_FALLBACK = [
+  { tag: "Flagship", title: "PVC Decor Film", subtitle: "For PVC Membrane Doors", process: "Vacuum Press Process", points: ["3D wrap ready", "Scratch & moisture resistant", "Wide design library", "Custom print runs"], image: "/images/pvc-decor-film.jpg", accent: "bg-orange-600" },
+  { tag: "New Launch", title: "Acrylic Sheets", subtitle: "For Cabinet Shutters & Panels", process: "Pressed & Polished", points: ["High-gloss finish", "UV stable", "Easy to fabricate", "Uniform thickness"], image: "/images/walnut-texture.jpg", accent: "bg-slate-900" },
+  { tag: "New Launch", title: "Laminates Wall Panels", subtitle: "Rigid Decorative Panels", process: "Pressed & Polished", points: ["Structural thickness", "Textured & solid ranges", "Cut-to-size", "Contract pricing"], image: "/images/marble-texture.jpg", accent: "bg-slate-900" },
 ];
 
 export default function Products() {
+  const [products, setProducts] = useState(PRODUCTS_FALLBACK);
+
+  useEffect(() => {
+    fetchCMS("products").then((items) => {
+      if (items && items.length > 0) {
+        setProducts(items.filter(p => p.active !== false).map((p, i) => ({
+          tag: p.tag || "Product",
+          title: p.name || p.title || "Product",
+          subtitle: p.subtitle || "",
+          process: p.process || "",
+          points: typeof p.points === "string" ? p.points.split("|") : (p.points || []),
+          image: p.image || "/images/pvc-decor-film.jpg",
+          accent: i === 0 ? "bg-orange-600" : "bg-slate-900",
+        })));
+      }
+    });
+  }, []);
+
   return (
     <section id="products" data-testid="products-section" className="py-20 sm:py-32 bg-white">
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
@@ -42,12 +38,24 @@ export default function Products() {
             </h2>
           </div>
           <p className="text-slate-600 max-w-md text-base leading-relaxed">
-            From flagship decor films to new-launch rigid laminates, KDIPL is built to replace imports with consistent, local supply.
+            From petlam decorative films to PVC Films. Topdecor is built to replace imports with consistent, local supply.
           </p>
         </div>
 
+        {/* Product names strip */}
+        <div className="flex flex-wrap items-center gap-3 mb-10">
+          {products.map((p, i) => (
+            <span key={i} className="inline-flex items-center gap-2.5">
+              {i > 0 && <span className="w-1 h-1 bg-orange-500 rotate-45 shrink-0" />}
+              <span className="text-sm font-display font-semibold text-slate-700 uppercase tracking-wide">
+                {p.title}
+              </span>
+            </span>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {PRODUCTS.map((p, i) => (
+          {products.map((p, i) => (
             <article
               key={i}
               data-testid={`product-card-${i}`}
@@ -57,6 +65,10 @@ export default function Products() {
                 <img
                   src={p.image}
                   alt={p.title}
+                  width={800}
+                  height={512}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
                 <span className={`absolute top-4 left-4 ${p.accent} text-white text-[10px] uppercase tracking-[0.2em] font-bold px-3 py-1.5`}>

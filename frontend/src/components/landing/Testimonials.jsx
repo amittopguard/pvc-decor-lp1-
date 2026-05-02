@@ -1,39 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Quote, ChevronLeft, ChevronRight, Star } from "lucide-react";
+import { fetchCMS } from "@/lib/cms";
 
-const TESTIMONIALS = [
-  {
-    quote: "We switched from a Chinese supplier to KDIPL last year. Lead time dropped from 45 days to under a week, and our shutter rejection rate is down 30%. The quality is repeatable batch after batch — that's what mattered most for our line.",
-    name: "R. Sundaresan",
-    role: "Production Head",
-    company: "Door Manufacturer · Tamil Nadu",
-    audience: "Manufacturer",
-    rating: 5,
-  },
-  {
-    quote: "Started as a regional distributor with KDIPL three years ago. Today my territory does 4× the volume I planned. They protect distributors, deliver on time, and the catalog keeps the customer interested. Honestly, my best supplier relationship.",
-    name: "Vikas Mehta",
-    role: "Founder",
-    company: "Plywood & Laminate Distributor · Pune",
-    audience: "Distributor",
-    rating: 5,
-  },
-  {
-    quote: "I used to import 2 containers a quarter. Sat down with KDIPL, did a per-sqm comparison and realised I was paying ₹14 extra per metre on freight, customs and FX swing. Now I source locally and free up working capital that was always stuck at sea.",
-    name: "Anand Kapoor",
-    role: "Director",
-    company: "Furniture Imports · Delhi NCR",
-    audience: "Ex-Importer",
-    rating: 5,
-  },
-  {
-    quote: "Their team understood vacuum-press behaviour better than my last three suppliers combined. Custom prints, consistent gloss, no surprises on the press shop floor. We made KDIPL our default film.",
-    name: "Pradeep Naik",
-    role: "Plant Manager",
-    company: "PVC Door Press · Mumbai",
-    audience: "Manufacturer",
-    rating: 5,
-  },
+const TESTIMONIALS_FALLBACK = [
+  { quote: "We switched from a Chinese supplier to TopDecor last year. Lead time dropped from 45 days to under a week.", name: "R. Sundaresan", role: "Production Head", company: "Door Manufacturer · Tamil Nadu", audience: "Manufacturer", rating: 5 },
+  { quote: "Started as a regional distributor three years ago. Today my territory does 4× the volume I planned.", name: "Vikas Mehta", role: "Founder", company: "Plywood & Laminate Distributor · Pune", audience: "Distributor", rating: 5 },
 ];
 
 const LOGOS = [
@@ -42,9 +13,17 @@ const LOGOS = [
 ];
 
 export default function Testimonials() {
+  const [testimonials, setTestimonials] = useState(TESTIMONIALS_FALLBACK);
   const [idx, setIdx] = useState(0);
-  const total = TESTIMONIALS.length;
-  const t = TESTIMONIALS[idx];
+
+  useEffect(() => {
+    fetchCMS("testimonials").then((items) => {
+      if (items && items.length > 0) setTestimonials(items);
+    });
+  }, []);
+
+  const total = testimonials.length;
+  const t = testimonials[idx] || testimonials[0];
 
   const go = (delta) => setIdx((i) => (i + delta + total) % total);
 
@@ -96,7 +75,7 @@ export default function Testimonials() {
 
           <div className="lg:col-span-8">
             <div className="flex items-center gap-1 mb-5">
-              {Array.from({ length: t.rating }).map((_, i) => (
+              {Array.from({ length: t.rating || 5 }).map((_, i) => (
                 <Star key={i} size={14} className="text-orange-500" fill="currentColor" />
               ))}
             </div>
@@ -124,7 +103,7 @@ export default function Testimonials() {
               <span className="text-slate-300"> / {String(total).padStart(2, "0")}</span>
             </div>
             <div className="mt-6 space-y-2">
-              {TESTIMONIALS.map((_, i) => (
+              {testimonials.map((_, i) => (
                 <button
                   key={i}
                   onClick={() => setIdx(i)}
@@ -133,7 +112,7 @@ export default function Testimonials() {
                     i === idx ? "bg-slate-900 text-white" : "text-slate-500 hover:text-slate-900"
                   }`}
                 >
-                  &mdash; {TESTIMONIALS[i].audience}
+                  &mdash; {testimonials[i].audience}
                 </button>
               ))}
             </div>

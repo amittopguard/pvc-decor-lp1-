@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /PVC-LP1
+Disallow: /PVC-LP1/admin
+Sitemap: https://topdecor.in/sitemap.xml

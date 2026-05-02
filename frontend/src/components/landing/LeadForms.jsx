@@ -198,8 +198,8 @@ export default function LeadForms() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="PVC Decor Film">PVC Decor Film (Membrane Doors)</SelectItem>
-                        <SelectItem value="PVC Laminate 1mm">PVC Laminate 1&nbsp;mm</SelectItem>
-                        <SelectItem value="PVC Laminate 3mm">PVC Laminate 3&nbsp;mm</SelectItem>
+                        <SelectItem value="Acrylic Sheets">Acrylic Sheets</SelectItem>
+                        <SelectItem value="Laminates Wall Panels">Laminates Wall Panels</SelectItem>
                         <SelectItem value="All Products">All Products</SelectItem>
                       </SelectContent>
                     </Select>
@@ -301,13 +301,13 @@ export default function LeadForms() {
                       className="bg-orange-600 text-white px-8 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-orange-700 disabled:opacity-70 transition-colors inline-flex items-center gap-2"
                     >
                       {loading ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                      {tab === "sample" && "Send Sample Request"}
+                      {tab === "sample" && "Request a Physical Sample — Free of Cost"}
                       {tab === "quote" && "Request Quote"}
                       {tab === "distributor" && "Submit Application"}
                       {tab === "comparison" && "Beat my current price"}
                     </button>
                     <p className="text-xs text-slate-500">
-                      By submitting you agree to be contacted by KDIPL about this enquiry.
+                      By submitting you agree to be contacted by TopDecor about this enquiry.
                     </p>
                   </div>
                 </form>

@@ -1,23 +1,59 @@
-import { Download, ArrowRight } from "lucide-react";
+import { useState } from "react";
+import { Download, ArrowRight, X, Loader2 } from "lucide-react";
 import { track } from "@/lib/analytics";
+import { api } from "@/lib/api";
 
 const CATALOG = [
-  { name: "Walnut Grove", category: "Wood", code: "KD-W-102", img: "https://images.pexels.com/photos/9467701/pexels-photo-9467701.jpeg" },
-  { name: "Carrara White", category: "Marble", code: "KD-M-204", img: "https://images.pexels.com/photos/3847494/pexels-photo-3847494.jpeg" },
-  { name: "Midnight Solid", category: "Solid", code: "KD-S-011", img: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe" },
-  { name: "Teak Linear", category: "Wood", code: "KD-W-118", img: "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3" },
-  { name: "Statuario Gold", category: "Marble", code: "KD-M-221", img: "https://images.unsplash.com/photo-1615529182904-14819c35db37" },
-  { name: "Oyster Grey", category: "Solid", code: "KD-S-034", img: "https://images.unsplash.com/photo-1618221118493-9cfa1a1c00da" },
-  { name: "Oak Rustic", category: "Wood", code: "KD-W-145", img: "https://images.unsplash.com/photo-1541123603104-512919d6a96c" },
-  { name: "Nero Marquina", category: "Marble", code: "KD-M-260", img: "https://images.unsplash.com/photo-1616486338812-3dadae4b4ace" },
+  { name: "Walnut Grove", category: "Wood", code: "KD-W-102", img: "/images/walnut-texture.jpg" },
+  { name: "Carrara White", category: "Marble", code: "KD-M-204", img: "/images/marble-texture.jpg" },
+  { name: "Midnight Solid", category: "Solid", code: "KD-S-011", img: "/images/abstract-gradient.jpg" },
+  { name: "Teak Linear", category: "Wood", code: "KD-W-118", img: "/images/teak-wood.jpg" },
+  { name: "Statuario Gold", category: "Marble", code: "KD-M-221", img: "/images/statuario-marble.jpg" },
+  { name: "Oyster Grey", category: "Solid", code: "KD-S-034", img: "/images/oyster-grey.jpg" },
+  { name: "Oak Rustic", category: "Wood", code: "KD-W-145", img: "/images/oak-rustic.jpg" },
+  { name: "Nero Marquina", category: "Marble", code: "KD-M-260", img: "/images/nero-marquina.jpg" },
 ];
 
 export default function Catalog() {
-  const handleDownload = () => {
-    track("catalog_download", { source: "catalog_section" });
-    // Placeholder catalog download — opens WhatsApp to request catalog
-    const msg = encodeURIComponent("Hi KDIPL, please send me the full PVC Decor Film & Laminate catalog.");
-    window.open(`https://wa.me/919311342988?text=${msg}`, "_blank");
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: "", email: "", phone: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const up = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.name || !form.email || !form.phone) {
+      setError("Please fill all fields.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      await api.post("/leads", {
+        type: "catalogue",
+        name: form.name,
+        email: form.email,
+        phone: form.phone,
+        product_interest: "Full Catalogue",
+        message: "Requested full catalogue download.",
+      });
+      track("catalog_download", { source: "catalog_form" });
+      setSuccess(true);
+    } catch (err) {
+      setError("Could not submit. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClose = () => {
+    setShowForm(false);
+    setForm({ name: "", email: "", phone: "" });
+    setError("");
+    setSuccess(false);
   };
 
   return (
@@ -31,12 +67,12 @@ export default function Catalog() {
             </h2>
           </div>
           <button
-            onClick={handleDownload}
+            onClick={() => setShowForm(true)}
             data-testid="download-catalog-btn"
             className="group inline-flex items-center gap-3 bg-slate-900 text-white px-7 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-orange-600 transition-colors self-start"
           >
             <Download size={16} />
-            Download Full Catalog
+            Download Full Catalogue
           </button>
         </div>
 
@@ -51,6 +87,10 @@ export default function Catalog() {
                 <img
                   src={item.img}
                   alt={item.name}
+                  width={400}
+                  height={400}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                 />
               </div>
@@ -79,11 +119,125 @@ export default function Catalog() {
             data-testid="catalog-sample-cta"
             className="inline-flex items-center gap-2 bg-orange-600 text-white px-8 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-orange-500 transition-colors shrink-0"
           >
-            Request Sample Box
+            Request a Physical Sample — Free of Cost
             <ArrowRight size={16} />
           </a>
         </div>
       </div>
+
+      {/* Catalogue Download Form Modal */}
+      {showForm && (
+        <div className="fixed inset-0 z-[999] flex items-center justify-center p-4" data-testid="catalog-modal">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-sm" onClick={handleClose} />
+
+          {/* Modal */}
+          <div className="relative bg-white w-full max-w-md p-8 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <button
+              onClick={handleClose}
+              className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-900 transition-colors"
+              aria-label="Close"
+              data-testid="catalog-modal-close"
+            >
+              <X size={20} />
+            </button>
+
+            {!success ? (
+              <>
+                <div className="text-[10px] uppercase tracking-[0.22em] text-orange-600 font-bold">
+                  Download Catalogue
+                </div>
+                <h3 className="mt-2 font-display font-bold text-slate-900 text-xl leading-tight">
+                  Fill your details to receive the full catalogue.
+                </h3>
+                <p className="mt-2 text-sm text-slate-500">
+                  We&rsquo;ll send the catalogue to your email and WhatsApp.
+                </p>
+
+                <form onSubmit={handleSubmit} className="mt-6 space-y-4" data-testid="catalog-form">
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.14em] font-semibold text-slate-700 mb-1.5">
+                      Full Name <span className="text-orange-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={form.name}
+                      onChange={up("name")}
+                      data-testid="catalog-input-name"
+                      className="w-full border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-600 focus:border-orange-600 transition-all"
+                      placeholder="Your name"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.14em] font-semibold text-slate-700 mb-1.5">
+                      Email <span className="text-orange-600">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={up("email")}
+                      data-testid="catalog-input-email"
+                      className="w-full border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-600 focus:border-orange-600 transition-all"
+                      placeholder="you@company.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs uppercase tracking-[0.14em] font-semibold text-slate-700 mb-1.5">
+                      Phone / WhatsApp <span className="text-orange-600">*</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={form.phone}
+                      onChange={up("phone")}
+                      data-testid="catalog-input-phone"
+                      className="w-full border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-600 focus:border-orange-600 transition-all"
+                      placeholder="+91 98765 43210"
+                    />
+                  </div>
+
+                  {error && (
+                    <p className="text-sm text-red-600 font-medium">{error}</p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    data-testid="catalog-submit-btn"
+                    className="w-full bg-orange-600 text-white px-6 py-4 font-semibold text-sm uppercase tracking-wider hover:bg-orange-700 disabled:opacity-70 transition-colors inline-flex items-center justify-center gap-2"
+                  >
+                    {loading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+                    Send Me The Catalogue
+                  </button>
+
+                  <p className="text-[11px] text-slate-400 text-center">
+                    By submitting you agree to be contacted by TopDecor.
+                  </p>
+                </form>
+              </>
+            ) : (
+              <div className="text-center py-6" data-testid="catalog-success">
+                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <h3 className="font-display font-bold text-slate-900 text-xl">
+                  Thank you, {form.name.split(" ")[0]}!
+                </h3>
+                <p className="mt-2 text-sm text-slate-600 leading-relaxed">
+                  Our team will share the full catalogue on your email and WhatsApp shortly.
+                </p>
+                <button
+                  onClick={handleClose}
+                  className="mt-6 bg-slate-900 text-white px-6 py-3 text-sm font-semibold uppercase tracking-wider hover:bg-orange-600 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

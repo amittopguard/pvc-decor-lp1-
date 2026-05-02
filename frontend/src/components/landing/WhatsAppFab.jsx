@@ -2,7 +2,7 @@ import { MessageCircle } from "lucide-react";
 import { track } from "@/lib/analytics";
 
 export default function WhatsAppFab() {
-  const msg = encodeURIComponent("Hi KDIPL, I came from your website and would like to know more about your PVC products.");
+  const msg = encodeURIComponent("Hi TopDecor, I came from your website and would like to know more about your PVC products.");
   return (
     <a
       href={`https://wa.me/919311342988?text=${msg}`}

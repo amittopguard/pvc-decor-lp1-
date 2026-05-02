@@ -16,8 +16,11 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  LogOut, Download, Loader2, Search, RefreshCcw, Trash2, MoreVertical, Eye,
+  LogOut, Download, Loader2, Search, RefreshCcw, Trash2, MoreVertical, Eye, Database,
 } from "lucide-react";
+import AdminLayout from "@/components/admin/AdminLayout";
+import ContentEditor from "@/components/admin/ContentEditor";
+import MediaLibrary from "@/components/admin/MediaLibrary";
 
 const STATUSES = ["new", "contacted", "qualified", "closed", "spam"];
 const STATUS_COLOR = {
@@ -41,8 +44,10 @@ function Login({ onSuccess }) {
       track("admin_login");
       toast.success("Welcome back");
       onSuccess();
-    } catch {
-      toast.error("Invalid password");
+    } catch (error) {
+      console.error(error);
+      const errMsg = error.response?.data?.detail || error.message;
+      toast.error(error.response?.status === 401 ? "Invalid password" : `Connection Error: ${errMsg}`);
     } finally {
       setLoading(false);
     }
@@ -50,14 +55,15 @@ function Login({ onSuccess }) {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6" data-testid="admin-login-page">
+      <meta name="robots" content="noindex, nofollow" />
       <form onSubmit={submit} className="w-full max-w-md bg-white border border-slate-200 p-10">
         <div className="flex items-center gap-2.5 mb-8">
           <div className="w-10 h-10 bg-slate-900 flex items-center justify-center">
-            <span className="text-orange-500 font-display font-bold text-lg">K</span>
+            <span className="text-orange-500 font-display font-bold text-lg">T</span>
           </div>
           <div>
-            <div className="font-display font-bold text-slate-900 text-lg">KDIPL Admin</div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Lead Management</div>
+            <div className="font-display font-bold text-slate-900 text-lg">TopDecor Admin</div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">Content Management</div>
           </div>
         </div>
 
@@ -85,7 +91,7 @@ function Login({ onSuccess }) {
   );
 }
 
-function Dashboard({ onLogout }) {
+function LeadsDashboard({ onLogout }) {
   const [stats, setStats] = useState(null);
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -155,7 +161,7 @@ function Dashboard({ onLogout }) {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `kdipl-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -165,180 +171,125 @@ function Dashboard({ onLogout }) {
     }
   };
 
+  const seedContent = async () => {
+    try {
+      const { data } = await adminApi.post("/admin/seed");
+      if (data.seeded?.length) {
+        toast.success(`Seeded: ${data.seeded.join(", ")}`);
+      } else {
+        toast.info("All collections already have data");
+      }
+    } catch {
+      toast.error("Seed failed");
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 overflow-x-hidden" data-testid="admin-dashboard">
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 bg-slate-900 flex items-center justify-center shrink-0">
-              <span className="text-orange-500 font-display font-bold text-lg">K</span>
+    <div>
+      {/* Stats */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8" data-testid="stats-grid">
+          <StatCard label="Total Leads" value={stats.total} accent />
+          <StatCard label="Sample" value={stats.by_type?.sample ?? 0} />
+          <StatCard label="Quote" value={stats.by_type?.quote ?? 0} />
+          <StatCard label="Distributor" value={stats.by_type?.distributor ?? 0} />
+          <StatCard label="Price Match" value={stats.by_type?.comparison ?? 0} />
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="bg-white border border-slate-200 mb-0">
+        <div className="p-4 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center gap-3">
+          <Tabs value={type} onValueChange={setType} className="w-full lg:w-auto">
+            <TabsList className="rounded-none bg-slate-100 p-0 h-auto border border-slate-200 flex-wrap">
+              {[
+                { v: "all", l: "All" }, { v: "sample", l: "Sample" },
+                { v: "quote", l: "Quote" }, { v: "distributor", l: "Distributor" },
+                { v: "comparison", l: "Price Match" },
+              ].map((t) => (
+                <TabsTrigger key={t.v} value={t.v} className="rounded-none px-3 py-2 text-xs uppercase tracking-wider font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                  {t.l}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <div className="flex-1 flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input placeholder="Search…" value={q} onChange={(e) => setQ(e.target.value)} className="rounded-none border-slate-300 pl-9" />
             </div>
-            <div className="min-w-0">
-              <div className="font-display font-bold text-slate-900 truncate">KDIPL Admin</div>
-              <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 truncate">Lead Management</div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            <button
-              onClick={downloadCsv}
-              data-testid="export-csv-btn"
-              className="inline-flex items-center gap-2 text-xs uppercase tracking-wider font-semibold border border-slate-300 px-3 sm:px-4 py-2.5 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-colors"
-            >
-              <Download size={14} /> <span className="hidden sm:inline">Export CSV</span>
-            </button>
-            <button
-              onClick={onLogout}
-              data-testid="admin-logout-btn"
-              className="inline-flex items-center gap-2 text-xs uppercase tracking-wider font-semibold border border-slate-300 px-3 sm:px-4 py-2.5 hover:bg-red-600 hover:text-white hover:border-red-600 transition-colors"
-            >
-              <LogOut size={14} /> <span className="hidden sm:inline">Logout</span>
-            </button>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="w-[140px] rounded-none border-slate-300"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <button onClick={load} className="p-2.5 border border-slate-300 hover:bg-slate-900 hover:text-white transition-colors" title="Refresh" aria-label="Refresh"><RefreshCcw size={14} /></button>
+            <button onClick={downloadCsv} className="p-2.5 border border-slate-300 hover:bg-slate-900 hover:text-white transition-colors" title="Export CSV" aria-label="Export CSV"><Download size={14} /></button>
+            <button onClick={seedContent} className="p-2.5 border border-slate-300 hover:bg-orange-600 hover:text-white transition-colors" title="Seed CMS data" aria-label="Seed CMS"><Database size={14} /></button>
           </div>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
-        {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-10" data-testid="stats-grid">
-            <StatCard label="Total Leads" value={stats.total} accent />
-            <StatCard label="Sample" value={stats.by_type?.sample ?? 0} />
-            <StatCard label="Quote" value={stats.by_type?.quote ?? 0} />
-            <StatCard label="Distributor" value={stats.by_type?.distributor ?? 0} />
-            <StatCard label="Price Match" value={stats.by_type?.comparison ?? 0} />
-          </div>
-        )}
-
-        <div className="bg-white border border-slate-200">
-          <div className="p-5 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center gap-4">
-            <Tabs value={type} onValueChange={setType} className="w-full lg:w-auto">
-              <TabsList className="rounded-none bg-slate-100 p-0 h-auto border border-slate-200 flex-wrap">
-                {[
-                  { v: "all", l: "All" },
-                  { v: "sample", l: "Sample" },
-                  { v: "quote", l: "Quote" },
-                  { v: "distributor", l: "Distributor" },
-                  { v: "comparison", l: "Price Match" },
-                ].map((t) => (
-                  <TabsTrigger
-                    key={t.v}
-                    value={t.v}
-                    data-testid={`filter-type-${t.v}`}
-                    className="rounded-none px-4 py-2.5 text-xs uppercase tracking-wider font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white"
-                  >
-                    {t.l}
-                  </TabsTrigger>
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-900 hover:bg-slate-900">
+                {["Date", "Type", "Name", "Company", "Email", "Phone", "Status", ""].map((h) => (
+                  <TableHead key={h} className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">{h}</TableHead>
                 ))}
-              </TabsList>
-            </Tabs>
-
-            <div className="flex-1 flex items-center gap-3">
-              <div className="relative flex-1">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <Input
-                  placeholder="Search name, email, company..."
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  className="rounded-none border-slate-300 pl-9 focus-visible:ring-orange-600 focus-visible:ring-offset-0"
-                  data-testid="search-input"
-                />
-              </div>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger className="w-[160px] rounded-none border-slate-300" data-testid="filter-status">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  {STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <button
-                onClick={load}
-                data-testid="refresh-btn"
-                className="p-2.5 border border-slate-300 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-colors"
-                title="Refresh"
-              >
-                <RefreshCcw size={14} />
-              </button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <Table data-testid="leads-table">
-              <TableHeader>
-                <TableRow className="bg-slate-900 hover:bg-slate-900">
-                  <TableHead className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">Date</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">Type</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">Name</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">Company</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">Email</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">Phone</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-widest text-slate-300 font-bold">Status</TableHead>
-                  <TableHead className="text-[10px] uppercase tracking-widest text-slate-300 font-bold text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow><TableCell colSpan={8} className="text-center py-10 text-slate-500">
+                  <Loader2 size={18} className="inline animate-spin mr-2" /> Loading…
+                </TableCell></TableRow>
+              ) : leads.length === 0 ? (
+                <TableRow><TableCell colSpan={8} className="text-center py-14 text-slate-500">No leads yet.</TableCell></TableRow>
+              ) : leads.map((l) => (
+                <TableRow key={l.id} className="hover:bg-slate-50">
+                  <TableCell className="text-xs text-slate-500">{new Date(l.created_at).toLocaleDateString()}</TableCell>
+                  <TableCell><span className="text-[10px] uppercase tracking-wider font-bold bg-slate-100 border border-slate-200 px-2 py-1">{l.type}</span></TableCell>
+                  <TableCell className="font-medium text-slate-900">{l.name}</TableCell>
+                  <TableCell className="text-slate-700">{l.company || "—"}</TableCell>
+                  <TableCell className="text-slate-700 text-sm">{l.email}</TableCell>
+                  <TableCell className="text-slate-700 text-sm">{l.phone}</TableCell>
+                  <TableCell>
+                    <Select value={l.status} onValueChange={(v) => updateStatus(l.id, v)}>
+                      <SelectTrigger className={`h-auto py-1 px-2 text-[10px] uppercase tracking-wider font-bold rounded-none border ${STATUS_COLOR[l.status] || ""}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>{STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="p-1.5 hover:bg-slate-100" aria-label="Actions"><MoreVertical size={16} /></button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setSelected(l)}><Eye size={14} className="mr-2" /> View</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => removeLead(l.id)} className="text-red-600"><Trash2 size={14} className="mr-2" /> Delete</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-10 text-slate-500">
-                    <Loader2 size={18} className="inline animate-spin mr-2" /> Loading...
-                  </TableCell></TableRow>
-                ) : leads.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-14 text-slate-500" data-testid="no-leads">
-                    No leads yet. Shared leads will appear here.
-                  </TableCell></TableRow>
-                ) : leads.map((l) => (
-                  <TableRow key={l.id} data-testid={`lead-row-${l.id}`} className="hover:bg-slate-50">
-                    <TableCell className="text-xs text-slate-500">{new Date(l.created_at).toLocaleDateString()}</TableCell>
-                    <TableCell><span className="text-[10px] uppercase tracking-wider font-bold bg-slate-100 border border-slate-200 px-2 py-1">{l.type}</span></TableCell>
-                    <TableCell className="font-medium text-slate-900">{l.name}</TableCell>
-                    <TableCell className="text-slate-700">{l.company || "—"}</TableCell>
-                    <TableCell className="text-slate-700 text-sm">{l.email}</TableCell>
-                    <TableCell className="text-slate-700 text-sm">{l.phone}</TableCell>
-                    <TableCell>
-                      <Select value={l.status} onValueChange={(v) => updateStatus(l.id, v)}>
-                        <SelectTrigger className={`h-auto py-1 px-2 text-[10px] uppercase tracking-wider font-bold rounded-none border ${STATUS_COLOR[l.status] || ""}`} data-testid={`status-select-${l.id}`}>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button className="p-1.5 hover:bg-slate-100" data-testid={`actions-${l.id}`}>
-                            <MoreVertical size={16} />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setSelected(l)}>
-                            <Eye size={14} className="mr-2" /> View
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => removeLead(l.id)} className="text-red-600">
-                            <Trash2 size={14} className="mr-2" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+              ))}
+            </TableBody>
+          </Table>
         </div>
-      </main>
+      </div>
 
+      {/* Detail Dialog */}
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
-        <DialogContent className="max-w-2xl rounded-none" data-testid="lead-detail-dialog">
+        <DialogContent className="max-w-2xl rounded-none">
           {selected && (
             <>
               <DialogHeader>
                 <DialogTitle className="font-display text-2xl">{selected.name}</DialogTitle>
-                <DialogDescription>
-                  {selected.type.toUpperCase()} lead &middot; {new Date(selected.created_at).toLocaleString()}
-                </DialogDescription>
+                <DialogDescription>{selected.type.toUpperCase()} lead · {new Date(selected.created_at).toLocaleString()}</DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm mt-2">
                 {[
@@ -357,41 +308,6 @@ function Dashboard({ onLogout }) {
                   <div className="sm:col-span-2">
                     <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Message</div>
                     <div className="mt-1 text-slate-900 bg-slate-50 border border-slate-200 p-3 whitespace-pre-wrap">{selected.message}</div>
-                  </div>
-                )}
-                {selected.file_meta && (
-                  <div className="sm:col-span-2" data-testid="lead-file-meta">
-                    <div className="text-[10px] uppercase tracking-widest text-slate-500 font-bold">Uploaded File</div>
-                    <button
-                      onClick={async () => {
-                        try {
-                          const token = localStorage.getItem("kdipl_admin_token");
-                          const res = await fetch(`${API}/admin/leads/${selected.id}/file`, {
-                            headers: { Authorization: `Bearer ${token}` },
-                          });
-                          if (!res.ok) throw new Error();
-                          const blob = await res.blob();
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement("a");
-                          a.href = url;
-                          a.download = selected.file_meta.filename;
-                          document.body.appendChild(a);
-                          a.click();
-                          a.remove();
-                          window.URL.revokeObjectURL(url);
-                        } catch {
-                          toast.error("Download failed");
-                        }
-                      }}
-                      data-testid="lead-file-download-btn"
-                      className="mt-2 w-full flex items-center gap-3 border border-slate-300 hover:border-orange-600 hover:bg-orange-50 transition-colors p-3 text-left"
-                    >
-                      <Download size={18} className="text-orange-600 shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-slate-900 truncate">{selected.file_meta.filename}</div>
-                        <div className="text-xs text-slate-500">{(selected.file_meta.size / 1024).toFixed(1)} KB &middot; click to download</div>
-                      </div>
-                    </button>
                   </div>
                 )}
               </div>
@@ -415,6 +331,7 @@ function StatCard({ label, value, accent }) {
 export default function Admin() {
   const [authed, setAuthed] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [activeModule, setActiveModule] = useState("leads");
 
   useEffect(() => {
     const t = localStorage.getItem("kdipl_admin_token");
@@ -433,5 +350,18 @@ export default function Admin() {
   if (checking) {
     return <div className="min-h-screen flex items-center justify-center text-slate-500"><Loader2 className="animate-spin" /></div>;
   }
-  return authed ? <Dashboard onLogout={logout} /> : <Login onSuccess={() => setAuthed(true)} />;
+
+  if (!authed) {
+    return <Login onSuccess={() => setAuthed(true)} />;
+  }
+
+  const CMS_MODULES = ["branding", "hero", "products", "categories", "audience", "trust", "faq", "testimonials", "seo_settings", "contact"];
+
+  return (
+    <AdminLayout active={activeModule} onNavigate={setActiveModule} onLogout={logout}>
+      {activeModule === "leads" && <LeadsDashboard onLogout={logout} />}
+      {activeModule === "media" && <MediaLibrary />}
+      {CMS_MODULES.includes(activeModule) && <ContentEditor collection={activeModule} />}
+    </AdminLayout>
+  );
 }
