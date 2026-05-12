@@ -1,11 +1,22 @@
+import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { track } from "@/lib/analytics";
+import { fetchCMSSingle } from "@/lib/cms";
 
 export default function WhatsAppFab() {
-  const msg = encodeURIComponent("Hi TopDecor, I came from your website and would like to know more about your PVC products.");
+  const [contact, setContact] = useState(null);
+
+  useEffect(() => {
+    fetchCMSSingle("contact").then((d) => { if (d) setContact(d); });
+  }, []);
+
+  const whatsapp = contact?.whatsapp || "919311342988";
+  const brandName = "TopDecor";
+  const msg = encodeURIComponent(`Hi ${brandName}, I came from your website and would like to know more about your PVC products.`);
+
   return (
     <a
-      href={`https://wa.me/919311342988?text=${msg}`}
+      href={`https://wa.me/${whatsapp}?text=${msg}`}
       target="_blank"
       rel="noreferrer"
       onClick={() => track("whatsapp_click", { source: "fab" })}

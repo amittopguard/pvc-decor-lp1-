@@ -1,9 +1,9 @@
-import { useEffect, useState, useCallback } from "react";
-import { adminApi } from "@/lib/api";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { adminApi, API } from "@/lib/api";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, Plus, Pencil, Trash2, GripVertical, Save, X } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, GripVertical, Save, X, Upload, Image as ImageIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 // Field configs per collection
@@ -12,9 +12,9 @@ const FIELD_CONFIGS = {
     { key: "brand_name", label: "Brand Name" },
     { key: "legal_name", label: "Legal Name" },
     { key: "tagline", label: "Tagline" },
-    { key: "logo_url", label: "Logo URL" },
-    { key: "favicon_url", label: "Favicon URL" },
-    { key: "og_image_url", label: "OG Image URL" },
+    { key: "logo_url", label: "Logo", type: "image_upload" },
+    { key: "favicon_url", label: "Favicon", type: "image_upload" },
+    { key: "og_image_url", label: "OG Image", type: "image_upload" },
   ],
   hero: [
     { key: "headline", label: "Headline" },
@@ -24,7 +24,7 @@ const FIELD_CONFIGS = {
     { key: "cta_text", label: "CTA Button Text" },
     { key: "cta_link", label: "CTA Link" },
     { key: "cta2_text", label: "Secondary CTA Text" },
-    { key: "image_url", label: "Hero Image URL" },
+    { key: "image_url", label: "Hero Image", type: "image_upload" },
   ],
   products: [
     { key: "name", label: "Product Name" },
@@ -33,7 +33,7 @@ const FIELD_CONFIGS = {
     { key: "subtitle", label: "Subtitle" },
     { key: "process", label: "Process" },
     { key: "points", label: "Features (pipe-separated)", type: "textarea" },
-    { key: "image", label: "Image URL" },
+    { key: "image", label: "Image", type: "image_upload" },
     { key: "active", label: "Active", type: "toggle" },
   ],
   categories: [
@@ -67,7 +67,7 @@ const FIELD_CONFIGS = {
     { key: "description", label: "Meta Description", type: "textarea" },
     { key: "og_title", label: "OG Title" },
     { key: "og_description", label: "OG Description", type: "textarea" },
-    { key: "og_image", label: "OG Image URL" },
+    { key: "og_image", label: "OG Image", type: "image_upload" },
     { key: "canonical", label: "Canonical URL" },
   ],
   contact: [
@@ -79,6 +79,136 @@ const FIELD_CONFIGS = {
     { key: "form_destination", label: "Form Destination Email" },
   ],
 };
+
+// Resolve image URL — handles both absolute /api/media/... and relative /logo.png paths
+function resolveImageUrl(url) {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  if (url.startsWith("/api/media/")) return `${API.replace("/api", "")}${url}`;
+  return url;
+}
+
+// ---------- Image Upload Field ----------
+function ImageUploadField({ value, onChange, label }) {
+  const fileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const previewUrl = resolveImageUrl(value);
+
+  const handleUpload = async (file) => {
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File exceeds 10MB");
+      return;
+    }
+    const allowed = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".ico"];
+    const ext = "." + file.name.split(".").pop().toLowerCase();
+    if (!allowed.includes(ext)) {
+      toast.error(`Unsupported file type: ${ext}`);
+      return;
+    }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await adminApi.post("/admin/media/upload", fd);
+      // Use the media URL returned by backend
+      onChange(data.url || data.webp_url || "");
+      toast.success(`Uploaded ${file.name}`);
+    } catch (e) {
+      toast.error("Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files?.[0]) handleUpload(e.dataTransfer.files[0]);
+  };
+
+  const onFileSelect = (e) => {
+    if (e.target.files?.[0]) handleUpload(e.target.files[0]);
+  };
+
+  const removeImage = () => {
+    onChange("");
+    if (fileRef.current) fileRef.current.value = "";
+  };
+
+  return (
+    <div>
+      {previewUrl ? (
+        <div className="mt-1 border border-slate-200 bg-slate-50 p-3">
+          <div className="flex items-start gap-3">
+            <div className="w-20 h-20 border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">
+              <img
+                src={previewUrl}
+                alt={label}
+                className="max-w-full max-h-full object-contain"
+                onError={(e) => { e.target.style.display = "none"; }}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs text-slate-600 truncate break-all">{value}</div>
+              <div className="flex gap-2 mt-2">
+                <label className="cursor-pointer inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-orange-600 hover:text-orange-700 border border-orange-200 px-3 py-1.5 hover:bg-orange-50 transition-colors">
+                  <Upload size={12} /> Replace
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={onFileSelect}
+                    className="hidden"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={removeImage}
+                  className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-red-500 hover:text-red-700 border border-red-200 px-3 py-1.5 hover:bg-red-50 transition-colors"
+                >
+                  <X size={12} /> Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+          className={`mt-1 border-2 border-dashed p-6 text-center transition-colors cursor-pointer ${
+            dragOver ? "border-orange-500 bg-orange-50" : "border-slate-300 bg-slate-50 hover:border-orange-400 hover:bg-orange-50/50"
+          }`}
+          onClick={() => fileRef.current?.click()}
+        >
+          {uploading ? (
+            <Loader2 className="mx-auto animate-spin text-orange-600" size={22} />
+          ) : (
+            <>
+              <ImageIcon className="mx-auto text-slate-400 mb-2" size={24} />
+              <p className="text-sm text-slate-600">
+                Click to upload or drag & drop
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-wider">
+                JPG · PNG · WebP · SVG · ICO
+              </p>
+            </>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*,.ico"
+            onChange={onFileSelect}
+            className="hidden"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
 
 function getDisplayLabel(item, fields) {
   if (item.name) return item.name;
@@ -194,6 +324,12 @@ export default function ContentEditor({ collection }) {
         ) : filtered.map((item) => (
           <div key={item.id} className="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 group">
             <GripVertical size={14} className="text-slate-300 shrink-0" />
+            {/* Show logo thumbnail in branding list */}
+            {collection === "branding" && item.logo_url && (
+              <div className="w-8 h-8 border border-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">
+                <img src={resolveImageUrl(item.logo_url)} alt="" className="max-w-full max-h-full object-contain" />
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <div className="font-medium text-slate-900 text-sm truncate">{getDisplayLabel(item, fields)}</div>
               <div className="text-xs text-slate-500 truncate">
@@ -225,7 +361,13 @@ export default function ContentEditor({ collection }) {
               {fields.map((f) => (
                 <div key={f.key}>
                   <Label className="text-xs uppercase tracking-wider font-semibold text-slate-600">{f.label}</Label>
-                  {f.type === "textarea" ? (
+                  {f.type === "image_upload" ? (
+                    <ImageUploadField
+                      value={editing[f.key] || ""}
+                      onChange={(url) => setEditing({ ...editing, [f.key]: url })}
+                      label={f.label}
+                    />
+                  ) : f.type === "textarea" ? (
                     <textarea
                       value={editing[f.key] || ""}
                       onChange={(e) => setEditing({ ...editing, [f.key]: e.target.value })}

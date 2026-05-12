@@ -1,9 +1,20 @@
 import { useEffect, useState } from "react";
 import { Mail, Phone, MapPin } from "lucide-react";
-import { fetchCMS } from "@/lib/cms";
+import { fetchCMS, fetchCMSSingle } from "@/lib/cms";
+import { API } from "@/lib/api";
+
+// Resolve image URL from CMS
+function resolveImg(url) {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  if (url.startsWith("/api/media/")) return `${API.replace("/api", "")}${url}`;
+  return url;
+}
 
 export default function Footer() {
   const [products, setProducts] = useState([]);
+  const [branding, setBranding] = useState(null);
+  const [contact, setContact] = useState(null);
 
   useEffect(() => {
     fetchCMS("products").then((items) => {
@@ -11,18 +22,32 @@ export default function Footer() {
         setProducts(items.filter(p => p.active !== false).map(p => p.name || p.title || "Product"));
       }
     });
+    fetchCMSSingle("branding").then((d) => { if (d) setBranding(d); });
+    fetchCMSSingle("contact").then((d) => { if (d) setContact(d); });
   }, []);
+
+  const brandName = branding?.brand_name || "TopDecor";
+  const logoUrl = resolveImg(branding?.logo_url);
+  const phone = contact?.phone || "+91 93113 42988";
+  const whatsapp = contact?.whatsapp || "919311342988";
+  const email = contact?.email || "sales@kdipl.in";
+  const emailCc = contact?.email_cc || "nm@kdipl.in";
+  const address = contact?.address || "India · Manufacturing & Export";
 
   return (
     <footer data-testid="site-footer" className="bg-slate-950 text-slate-300">
       <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16 grid grid-cols-1 md:grid-cols-12 gap-10">
         <div className="md:col-span-5">
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-orange-600 flex items-center justify-center">
-              <span className="text-white font-display font-bold text-lg">T</span>
-            </div>
+            {logoUrl ? (
+              <img src={logoUrl} alt={brandName} className="w-10 h-10 object-contain" />
+            ) : (
+              <div className="w-10 h-10 bg-orange-600 flex items-center justify-center">
+                <span className="text-white font-display font-bold text-lg">{brandName.charAt(0)}</span>
+              </div>
+            )}
             <div>
-              <div className="font-display font-bold text-white text-xl">TopDecor</div>
+              <div className="font-display font-bold text-white text-xl">{brandName}</div>
               <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Decor Films &amp; Laminates</div>
             </div>
           </div>
@@ -46,18 +71,18 @@ export default function Footer() {
           <ul className="mt-4 space-y-3 text-sm">
             <li className="flex items-start gap-3">
               <Phone size={14} className="mt-1 text-slate-500" />
-              <a href="https://wa.me/919311342988" target="_blank" rel="noreferrer" className="hover:text-white">+91 93113 42988</a>
+              <a href={`https://wa.me/${whatsapp}`} target="_blank" rel="noreferrer" className="hover:text-white">{phone}</a>
             </li>
             <li className="flex items-start gap-3">
               <Mail size={14} className="mt-1 text-slate-500" />
               <div>
-                <a href="mailto:sales@kdipl.in" className="block hover:text-white">sales@kdipl.in</a>
-                <a href="mailto:nm@kdipl.in" className="block text-slate-400 hover:text-white">nm@kdipl.in</a>
+                <a href={`mailto:${email}`} className="block hover:text-white">{email}</a>
+                {emailCc && <a href={`mailto:${emailCc}`} className="block text-slate-400 hover:text-white">{emailCc}</a>}
               </div>
             </li>
             <li className="flex items-start gap-3">
               <MapPin size={14} className="mt-1 text-slate-500" />
-              <span>India &middot; Manufacturing &amp; Export</span>
+              <span>{address}</span>
             </li>
           </ul>
         </div>
@@ -65,7 +90,7 @@ export default function Footer() {
 
       <div className="border-t border-slate-800">
         <div className="max-w-7xl mx-auto px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-slate-500">
-          <div>&copy; {new Date().getFullYear()} TopDecor. All rights reserved.</div>
+          <div>&copy; {new Date().getFullYear()} {brandName}. All rights reserved.</div>
           <div className="flex items-center gap-5">
             <a href="/admin" data-testid="footer-admin-link" className="hover:text-white">Admin</a>
             <a href="#top" className="hover:text-white">Back to top</a>

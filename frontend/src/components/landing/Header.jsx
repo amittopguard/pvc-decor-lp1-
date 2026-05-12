@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
-import { KDIPL } from "@/lib/api";
+import { KDIPL, API } from "@/lib/api";
+import { fetchCMSSingle } from "@/lib/cms";
 
 const NAV = [
   { href: "#products", label: "Products" },
@@ -10,15 +11,31 @@ const NAV = [
   { href: "#contact", label: "Contact" },
 ];
 
+// Resolve image URL from CMS — handles /api/media/... and static paths
+function resolveImg(url) {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  if (url.startsWith("/api/media/")) return `${API.replace("/api", "")}${url}`;
+  return url;
+}
+
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [branding, setBranding] = useState(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    fetchCMSSingle("branding").then((d) => { if (d) setBranding(d); });
+  }, []);
+
+  const brandName = branding?.brand_name || KDIPL.company;
+  const logoUrl = resolveImg(branding?.logo_url);
 
   return (
     <header
@@ -29,11 +46,15 @@ export default function Header() {
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-8 h-16 flex items-center justify-between">
         <a href="#top" data-testid="logo-link" className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-slate-900 flex items-center justify-center">
-            <span className="text-orange-500 font-display font-bold text-lg tracking-tight">T</span>
-          </div>
+          {logoUrl ? (
+            <img src={logoUrl} alt={brandName} className="w-9 h-9 object-contain" />
+          ) : (
+            <div className="w-9 h-9 bg-slate-900 flex items-center justify-center">
+              <span className="text-orange-500 font-display font-bold text-lg tracking-tight">{brandName.charAt(0)}</span>
+            </div>
+          )}
           <div className="leading-tight">
-            <div className="font-display font-bold text-slate-900 text-lg">{KDIPL.company}</div>
+            <div className="font-display font-bold text-slate-900 text-lg">{brandName}</div>
             <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 -mt-0.5">Decor Films &amp; Laminates</div>
           </div>
         </a>

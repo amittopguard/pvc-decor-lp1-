@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, API } from "@/lib/api";
 import { track } from "@/lib/analytics";
+import { fetchCMSSingle } from "@/lib/cms";
 import { Loader2, Send, Upload, FileCheck2, X } from "lucide-react";
 
 const initial = {
@@ -32,6 +33,16 @@ export default function LeadForms() {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
   const fileRef = useRef(null);
+  const [contact, setContact] = useState(null);
+
+  useEffect(() => {
+    fetchCMSSingle("contact").then((d) => { if (d) setContact(d); });
+  }, []);
+
+  const email = contact?.email || "sales@kdipl.in";
+  const emailCc = contact?.email_cc || "nm@kdipl.in";
+  const phone = contact?.phone || "+91 93113 42988";
+  const whatsapp = contact?.whatsapp || "919311342988";
 
   // listen for hash to switch tabs (e.g., #contact?tab=comparison)
   if (typeof window !== "undefined" && window.__kdiplSetLeadTab !== "set") {
@@ -113,18 +124,18 @@ export default function LeadForms() {
             <div className="mt-10 border-t border-slate-800 pt-8 space-y-5 text-sm">
               <div>
                 <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500 font-bold">Email</div>
-                <a href="mailto:sales@kdipl.in" className="mt-1 block text-white hover:text-orange-400">sales@kdipl.in</a>
-                <a href="mailto:nm@kdipl.in" className="block text-slate-400 hover:text-orange-400">nm@kdipl.in</a>
+                <a href={`mailto:${email}`} className="mt-1 block text-white hover:text-orange-400">{email}</a>
+                {emailCc && <a href={`mailto:${emailCc}`} className="block text-slate-400 hover:text-orange-400">{emailCc}</a>}
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-[0.22em] text-slate-500 font-bold">WhatsApp / Phone</div>
                 <a
-                  href="https://wa.me/919311342988"
+                  href={`https://wa.me/${whatsapp}`}
                   target="_blank"
                   rel="noreferrer"
                   className="mt-1 block text-white hover:text-orange-400"
                 >
-                  +91 93113 42988
+                  {phone}
                 </a>
               </div>
               <div>
