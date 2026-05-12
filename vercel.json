@@ -7,11 +7,5 @@
     { "source": "/PVC-LP1/(.*)", "destination": "/PVC-LP1/index.html" },
     { "source": "/PVC-LP1", "destination": "/PVC-LP1/index.html" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
-  ],
-  "functions": {
-    "api/index.py": {
-      "runtime": "@vercel/python@4",
-      "maxDuration": 30
-    }
-  }
+  ]
 }
