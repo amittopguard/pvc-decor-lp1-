@@ -1,9 +1,17 @@
 {
-  "rewrites": [
-    { "source": "/PVC-LP1/(.*)", "destination": "/PVC-LP1/index.html" },
-    { "source": "/PVC-LP1", "destination": "/PVC-LP1/index.html" }
-  ],
   "buildCommand": "cd frontend && npm install --legacy-peer-deps && npm run build",
   "outputDirectory": "frontend/build",
-  "framework": null
+  "framework": null,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.py" },
+    { "source": "/PVC-LP1/(.*)", "destination": "/PVC-LP1/index.html" },
+    { "source": "/PVC-LP1", "destination": "/PVC-LP1/index.html" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/index.py": {
+      "runtime": "@vercel/python@4",
+      "maxDuration": 30
+    }
+  }
 }
