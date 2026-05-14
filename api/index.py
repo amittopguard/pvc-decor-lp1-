@@ -30,7 +30,7 @@ LEAD_TO_EMAIL = os.environ.get('LEAD_TO_EMAIL', 'sales@kdipl.in')
 LEAD_CC_EMAIL = os.environ.get('LEAD_CC_EMAIL', '')
 
 DB_HOST = os.environ.get('DB_HOST', 'aws-1-ap-southeast-1.pooler.supabase.com')
-DB_PORT = int(os.environ.get('DB_PORT', '5432'))
+DB_PORT = int(os.environ.get('DB_PORT', '6543'))
 DB_NAME = os.environ.get('DB_NAME', 'postgres')
 DB_USER = os.environ.get('DB_USER', 'postgres.rycahettjebpaqrlmtsy')
 DB_PASS = os.environ.get('DB_PASS', 'Mittal@01pvc')
