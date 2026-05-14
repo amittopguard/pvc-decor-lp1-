@@ -47,9 +47,14 @@ def get_db():
     global _conn
     try:
         if _conn and not _conn.closed:
-            _conn.isolation_level  # test connection
+            # Quick test to see if connection is alive
+            with _conn.cursor() as cur:
+                cur.execute("SELECT 1")
             return _conn
     except Exception:
+        try:
+            if _conn: _conn.close()
+        except: pass
         _conn = None
     _conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
                              user=DB_USER, password=DB_PASS, sslmode='require',
@@ -57,25 +62,35 @@ def get_db():
     _conn.autocommit = True
     return _conn
 
+def _safe_db():
+    """Get DB connection with retry on failure."""
+    try:
+        return get_db()
+    except Exception as e:
+        logger.error("DB connection failed (attempt 1): %s", e)
+        global _conn
+        _conn = None
+        return get_db()  # retry once
+
 def db_exec(sql, params=None):
-    conn = get_db()
+    conn = _safe_db()
     with conn.cursor() as cur:
         cur.execute(sql, params)
 
 def db_fetch_all(sql, params=None):
-    conn = get_db()
+    conn = _safe_db()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(sql, params)
         return cur.fetchall()
 
 def db_fetch_one(sql, params=None):
-    conn = get_db()
+    conn = _safe_db()
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute(sql, params)
         return cur.fetchone()
 
 def db_fetch_val(sql, params=None):
-    conn = get_db()
+    conn = _safe_db()
     with conn.cursor() as cur:
         cur.execute(sql, params)
         row = cur.fetchone()
@@ -179,6 +194,24 @@ r = APIRouter(prefix="/api")
 @r.get("/")
 def root():
     return {"service": "TopDecor API", "status": "ok"}
+
+@r.get("/health")
+def health():
+    """Debug endpoint to check DB connectivity and env vars."""
+    info = {"db_host": DB_HOST, "db_name": DB_NAME, "db_user": DB_USER,
+            "has_password": bool(DB_PASS), "db_port": DB_PORT}
+    try:
+        conn = get_db()
+        info["db_connected"] = True
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM cms_content")
+            info["cms_rows"] = cur.fetchone()[0]
+            cur.execute("SELECT COUNT(*) FROM leads")
+            info["lead_rows"] = cur.fetchone()[0]
+    except Exception as e:
+        info["db_connected"] = False
+        info["db_error"] = str(e)
+    return info
 
 @r.post("/leads")
 def create_lead(payload: LeadIn):
