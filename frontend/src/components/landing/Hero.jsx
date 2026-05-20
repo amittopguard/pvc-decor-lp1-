@@ -202,7 +202,7 @@ export default function Hero() {
           {/* Stat micro-tiles */}
           <div className="grid grid-cols-2 gap-px bg-white/10 border border-white/10">
             {[
-              { v: "23+", l: "Years" },
+              { v: "23+", l: "Years Manufacturers" },
               { v: "800+", l: "Designs" },
               { v: "1350", l: "mm max width" },
               { v: "Low", l: "MOQ" },
