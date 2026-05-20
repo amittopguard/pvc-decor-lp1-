@@ -11,7 +11,7 @@ const AUDIENCES_FALLBACK = [
 ];
 
 const MARQUEE = [
-  "Wall Panels", "Laminates", "Acrylic Sheets",
+  "Wall Panels", "Laminates",
   "Pan-India Dispatch", "Custom Prints", "Low MOQ", "Export Documentation",
   "Walnut · Marble · Solid", "23 Years In The Press",
 ];
