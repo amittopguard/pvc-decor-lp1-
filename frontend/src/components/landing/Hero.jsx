@@ -204,7 +204,7 @@ export default function Hero() {
             {[
               { v: "23+", l: "Years Manufacturers" },
               { v: "800+", l: "Designs" },
-              { v: "1350", l: "mm max width" },
+              { v: "1250", l: "mm max width" },
               { v: "Low", l: "MOQ" },
             ].map((s, i) => (
               <div key={i} className="bg-slate-950/80 p-5">
