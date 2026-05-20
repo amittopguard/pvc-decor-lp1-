@@ -56,7 +56,7 @@ export default function Hero() {
   }, []);
 
   // Fallback values
-  const headline = hero?.headline || "Imports are slow.";
+  const headline = hero?.headline || "Imports are slow";
   const subHeadline = hero?.sub_headline || "And expensive. And, honestly —";
   const twistLine = hero?.twist_line || "OPTIONAL.";
   const description = hero?.description || "We manufacture Wall Panels, Laminates & Acrylic Sheets. From our floor to yours.";
