@@ -35,7 +35,7 @@ export default function Importers() {
             Stop paying for <span className="text-orange-500">freight, duty and delays.</span>
           </h2>
           <p className="mt-6 text-slate-300 text-lg leading-relaxed">
-            If you currently import PVC decor films from china— there is a simpler, faster and cheaper path. Manufactured in India, shipped locally or to your port.
+            If you currently imports PVC decor films from china— there is a simpler, faster and cheaper path. Manufactured in India, shipped locally or to your port.
           </p>
         </div>
 
