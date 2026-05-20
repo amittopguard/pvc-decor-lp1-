@@ -57,7 +57,7 @@ export default function Hero() {
 
   // Fallback values
   const headline = hero?.headline || "Imports are slow";
-  const subHeadline = hero?.sub_headline || "And expensive. And, honestly —";
+  const subHeadline = hero?.sub_headline || "And expensive and, honestly —";
   const twistLine = hero?.twist_line || "OPTIONAL.";
   const description = hero?.description || "We manufacture Wall Panels, Laminates & Acrylic Sheets. From our floor to yours.";
   const ctaText = hero?.cta_text || "Get a Free Sample Box";
@@ -111,7 +111,7 @@ export default function Hero() {
             </div>
             {subHeadline.includes("—") && (
               <div className="text-slate-500 text-xl sm:text-3xl lg:text-4xl mt-3 sm:mt-4 pl-8 sm:pl-24 lg:pl-48">
-                And, honestly &mdash;
+                and, honestly &mdash;
               </div>
             )}
 
