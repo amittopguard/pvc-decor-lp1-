@@ -57,7 +57,7 @@ export default function Hero() {
 
   // Fallback values
   const headline = hero?.headline || "Imports are slow";
-  const subHeadline = hero?.sub_headline || "And expensive and, honestly —";
+  const subHeadline = hero?.sub_headline || "and expensive and, honestly —";
   const twistLine = hero?.twist_line || "OPTIONAL.";
   const description = hero?.description || "We manufacture Wall Panels, Laminates & Acrylic Sheets. From our floor to yours.";
   const ctaText = hero?.cta_text || "Get a Free Sample Box";
