@@ -6,7 +6,7 @@ const ROWS = [
   { k: "Customization", imp: "Rigid, long setup", kd: "Custom prints & textures" },
   { k: "Freight & Duty", imp: "High & volatile", kd: "Direct, predictable" },
   { k: "Quality Recourse", imp: "Cross-border disputes", kd: "Local QC & replacement" },
-  { k: "After-Sales Support", imp: "Limited, time-zone gap", kd: "Dedicated KAM in India" },
+  { k: "After-Sales Support", imp: "Limited, time-zone gap", kd: "Dedicated TEAM in India" },
   { k: "Working Capital", imp: "Blocked in transit", kd: "Faster inventory turns" },
 ];
 
