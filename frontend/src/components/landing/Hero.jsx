@@ -57,7 +57,7 @@ export default function Hero() {
 
   // Fallback values
   const headline = hero?.headline || "Imports are slow";
-  const subHeadline = hero?.sub_headline || "and expensive and, honestly —";
+  const subHeadline = hero?.sub_headline || "and expensive";
   const twistLine = hero?.twist_line || "OPTIONAL.";
   const description = hero?.description || "We manufacture Wall Panels, Laminates & Acrylic Sheets. From our floor to yours.";
   const ctaText = hero?.cta_text || "Get a Free Sample Box";
@@ -109,11 +109,9 @@ export default function Hero() {
             <div className="text-slate-400 text-3xl sm:text-5xl lg:text-7xl mt-3 sm:mt-4 pl-4 sm:pl-12 lg:pl-24">
               {subHeadline.split("—")[0]}
             </div>
-            {subHeadline.includes("—") && (
-              <div className="text-slate-500 text-xl sm:text-3xl lg:text-4xl mt-3 sm:mt-4 pl-8 sm:pl-24 lg:pl-48">
-                and, honestly &mdash;
-              </div>
-            )}
+            <div className="text-slate-500 text-xl sm:text-3xl lg:text-4xl mt-3 sm:mt-4 pl-8 sm:pl-24 lg:pl-48">
+              and honestly
+            </div>
 
             {/* The twist — full bleed orange line with a flicker */}
             <div className="mt-5 sm:mt-7 relative">
