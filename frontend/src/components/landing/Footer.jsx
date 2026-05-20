@@ -48,11 +48,11 @@ export default function Footer() {
             )}
             <div>
               <div className="font-display font-bold text-white text-xl">{brandName}</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Decor Films &amp; Laminates</div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Wall Panels &middot; Laminates &middot; Acrylic</div>
             </div>
           </div>
           <p className="mt-5 text-sm leading-relaxed text-slate-400 max-w-md">
-            Premium PVC Decor Film for membrane doors and Acrylic Sheets. Made in India, shipped worldwide. Backed by 23+ years of industry experience.
+            Premium Wall Panels, Laminates & Acrylic Sheets. Made in India, shipped worldwide. Backed by 23+ years of industry experience.
           </p>
         </div>
 

@@ -22,7 +22,7 @@ export default function Manufacturers() {
               Door &amp; furniture makers — your consistent supply partner.
             </h2>
             <p className="mt-6 text-slate-600 text-lg leading-relaxed">
-              If your line consumes PVC decor film daily, you already know the pain of inconsistent imports. TopDecor replaces that with predictable, local, specs-matched supply.
+              If your line consumes wall panels, laminates or acrylic daily, you already know the pain of inconsistent imports. TopDecor replaces that with predictable, local, specs-matched supply.
             </p>
 
             <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 gap-5">

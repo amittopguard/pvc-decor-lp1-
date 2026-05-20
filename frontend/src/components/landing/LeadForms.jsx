@@ -208,9 +208,9 @@ export default function LeadForms() {
                         <SelectValue placeholder="Select a product" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="PVC Decor Film">PVC Decor Film (Membrane Doors)</SelectItem>
-                        <SelectItem value="Acrylic Sheets">Acrylic Sheets</SelectItem>
-                        <SelectItem value="Laminates Wall Panels">Laminates Wall Panels</SelectItem>
+                        <SelectItem value="Wall Panel">Wall Panel</SelectItem>
+                        <SelectItem value="Laminates">Laminates</SelectItem>
+                        <SelectItem value="Acrylic">Acrylic</SelectItem>
                         <SelectItem value="All Products">All Products</SelectItem>
                       </SelectContent>
                     </Select>

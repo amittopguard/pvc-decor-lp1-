@@ -20,6 +20,6 @@ export const KDIPL = {
   email: "sales@kdipl.in",
   emailCc: "nm@kdipl.in",
   company: "TopDecor",
-  tagline: "TopDecor — Sajao Bharat, Badhao Bharat",
+  tagline: "TopDecor — Wall Panels · Laminates · Acrylic",
   years: "23+",
 };

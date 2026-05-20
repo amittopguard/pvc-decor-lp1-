@@ -3,9 +3,9 @@ import { ArrowRight } from "lucide-react";
 import { fetchCMS } from "@/lib/cms";
 
 const PRODUCTS_FALLBACK = [
-  { tag: "Flagship", title: "PVC Decor Film", subtitle: "For PVC Membrane Doors", process: "Vacuum Press Process", points: ["3D wrap ready", "Scratch & moisture resistant", "Wide design library", "Custom print runs"], image: "/images/pvc-decor-film.jpg", accent: "bg-orange-600" },
-  { tag: "New Launch", title: "Acrylic Sheets", subtitle: "For Cabinet Shutters & Panels", process: "Pressed & Polished", points: ["High-gloss finish", "UV stable", "Easy to fabricate", "Uniform thickness"], image: "/images/walnut-texture.jpg", accent: "bg-slate-900" },
-  { tag: "New Launch", title: "Laminates Wall Panels", subtitle: "Rigid Decorative Panels", process: "Pressed & Polished", points: ["Structural thickness", "Textured & solid ranges", "Cut-to-size", "Contract pricing"], image: "/images/marble-texture.jpg", accent: "bg-slate-900" },
+  { tag: "Flagship", title: "Wall Panel", subtitle: "Decorative Wall Cladding", process: "Pressed & Finished", points: ["Premium surface finish", "Scratch & moisture resistant", "Wide design library", "Easy installation"], image: "/images/pvc-decor-film.jpg", accent: "bg-orange-600" },
+  { tag: "Core", title: "Laminates", subtitle: "High-Pressure Decorative Laminates", process: "Pressed & Polished", points: ["Structural thickness", "Textured & solid ranges", "Cut-to-size", "Contract pricing"], image: "/images/walnut-texture.jpg", accent: "bg-slate-900" },
+  { tag: "Core", title: "Acrylic", subtitle: "For Cabinet Shutters & Panels", process: "Pressed & Polished", points: ["High-gloss finish", "UV stable", "Easy to fabricate", "Uniform thickness"], image: "/images/marble-texture.jpg", accent: "bg-slate-900" },
 ];
 
 export default function Products() {
@@ -38,7 +38,7 @@ export default function Products() {
             </h2>
           </div>
           <p className="text-slate-600 max-w-md text-base leading-relaxed">
-            From petlam decorative films to PVC Films. Topdecor is built to replace imports with consistent, local supply.
+            From Wall Panels to Laminates to Acrylic. TopDecor is built to replace imports with consistent, local supply.
           </p>
         </div>
 
