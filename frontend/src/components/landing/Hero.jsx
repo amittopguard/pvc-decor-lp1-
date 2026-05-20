@@ -121,7 +121,7 @@ export default function Hero() {
                 {twistLine}
               </div>
               <span className="absolute -top-2 -right-2 sm:top-0 sm:right-2 lg:top-2 lg:right-6 text-[10px] uppercase tracking-[0.28em] font-bold text-orange-300 hidden sm:block">
-                _ _ _ TOPDECOR REPLACES THEM.
+                Wall Panel · Laminates · Acrylic
               </span>
             </div>
           </div>
