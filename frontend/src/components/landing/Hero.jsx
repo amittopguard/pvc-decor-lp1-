@@ -13,7 +13,7 @@ const AUDIENCES_FALLBACK = [
 const MARQUEE = [
   "Wall Panels", "Laminates",
   "Pan-India Dispatch", "Custom Prints", "Low MOQ", "Export Documentation",
-  "Walnut · Marble · Solid", "23 Years In The Press",
+  "Walnut · Marble · Solid", "23 Years In The Manufacturers",
 ];
 
 function useCountUp(end, durationMs = 1400, start = 0) {
