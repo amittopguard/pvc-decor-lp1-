@@ -139,7 +139,7 @@ export default function Hero() {
                 className="group inline-flex items-center gap-2 border border-white/15 bg-white/5 backdrop-blur px-4 py-2.5 text-xs uppercase tracking-[0.16em] font-semibold text-white hover:bg-orange-600 hover:border-orange-600 transition-all"
               >
                 <a.icon size={14} className="text-orange-400 group-hover:text-white transition-colors" />
-                I&rsquo;m a {a.label}
+                I&rsquo;m {/^[aeiou]/i.test(a.label) ? "an" : "a"} {a.label}
                 <ArrowUpRight size={12} className="opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
               </a>
             ))}
