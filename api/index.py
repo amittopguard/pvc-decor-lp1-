@@ -1,5 +1,6 @@
 """
-TopDecor API — Vercel Serverless (PostgreSQL/Supabase)
+TopDecor API — Vercel Serverless (MySQL on cPanel)
+Migrated from Supabase Postgres → cPanel MySQL on June 29, 2026
 """
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, Response
@@ -10,8 +11,8 @@ from typing import Optional, Literal
 import os, io, csv, hmac, hashlib, base64, json, uuid, logging, asyncio, urllib.parse
 from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
-import psycopg2
-import psycopg2.extras
+import pymysql
+import pymysql.cursors
 
 try:
     import resend
@@ -29,11 +30,11 @@ SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
 LEAD_TO_EMAIL = os.environ.get('LEAD_TO_EMAIL', 'sales@kdipl.in')
 LEAD_CC_EMAIL = os.environ.get('LEAD_CC_EMAIL', '')
 
-DB_HOST = os.environ.get('DB_HOST', 'aws-1-ap-southeast-1.pooler.supabase.com')
-DB_PORT = int(os.environ.get('DB_PORT', '6543'))
-DB_NAME = os.environ.get('DB_NAME', 'postgres')
-DB_USER = os.environ.get('DB_USER', 'postgres.rycahettjebpaqrlmtsy')
-DB_PASS = os.environ.get('DB_PASS', 'Mittal@01pvc')
+DB_HOST = os.environ.get('DB_HOST', '103.21.58.121')
+DB_PORT = int(os.environ.get('DB_PORT', '3306'))
+DB_NAME = os.environ.get('DB_NAME', 'topgusw5_topdecor')
+DB_USER = os.environ.get('DB_USER', 'topgusw5_tduser')
+DB_PASS = os.environ.get('DB_PASS', '')
 
 if RESEND_KEY and resend:
     resend.api_key = RESEND_KEY
@@ -46,27 +47,34 @@ _conn = None
 def get_db():
     global _conn
     try:
-        if _conn and not _conn.closed:
+        if _conn and _conn.open:
             # Quick test to see if connection is alive
             with _conn.cursor() as cur:
                 cur.execute("SELECT 1")
             return _conn
-    except Exception:
+    except (pymysql.err.OperationalError, pymysql.err.InterfaceError, pymysql.err.Error, Exception):
         try:
             if _conn: _conn.close()
         except: pass
         _conn = None
-    _conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, dbname=DB_NAME,
-                             user=DB_USER, password=DB_PASS, sslmode='require',
-                             connect_timeout=10)
-    _conn.autocommit = True
+    _conn = pymysql.connect(
+        host=DB_HOST,
+        port=DB_PORT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASS,
+        connect_timeout=10,
+        autocommit=True,
+        charset='utf8mb4',
+        cursorclass=pymysql.cursors.DictCursor
+    )
     return _conn
 
 def _safe_db():
     """Get DB connection with retry on failure."""
     try:
         return get_db()
-    except Exception as e:
+    except (pymysql.err.OperationalError, pymysql.err.InterfaceError, pymysql.err.Error, Exception) as e:
         logger.error("DB connection failed (attempt 1): %s", e)
         global _conn
         _conn = None
@@ -79,19 +87,19 @@ def db_exec(sql, params=None):
 
 def db_fetch_all(sql, params=None):
     conn = _safe_db()
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with conn.cursor() as cur:  # DictCursor set at connection level
         cur.execute(sql, params)
         return cur.fetchall()
 
 def db_fetch_one(sql, params=None):
     conn = _safe_db()
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+    with conn.cursor() as cur:  # DictCursor set at connection level
         cur.execute(sql, params)
         return cur.fetchone()
 
 def db_fetch_val(sql, params=None):
     conn = _safe_db()
-    with conn.cursor() as cur:
+    with conn.cursor(cursor=pymysql.cursors.Cursor) as cur:  # plain tuple cursor for scalar
         cur.execute(sql, params)
         row = cur.fetchone()
         return row[0] if row else None
@@ -259,13 +267,13 @@ CMS_COLLECTIONS = ["branding","hero","products","categories","audience","trust",
 def get_content(collection: str):
     if collection not in CMS_COLLECTIONS: raise HTTPException(404, "Unknown collection")
     rows = db_fetch_all("SELECT data FROM cms_content WHERE collection=%s ORDER BY sort_order ASC", (collection,))
-    return {"items": [r["data"] for r in rows]}
+    return {"items": [json.loads(r["data"]) if isinstance(r["data"], str) else r["data"] for r in rows]}
 
 @r.get("/admin/content/{collection}")
 def admin_list_content(collection: str, _=Depends(require_admin)):
     if collection not in CMS_COLLECTIONS: raise HTTPException(404)
     rows = db_fetch_all("SELECT data FROM cms_content WHERE collection=%s ORDER BY sort_order ASC", (collection,))
-    return {"items": [r["data"] for r in rows]}
+    return {"items": [json.loads(r["data"]) if isinstance(r["data"], str) else r["data"] for r in rows]}
 
 @r.post("/admin/content/{collection}/item")
 async def admin_create_item(collection: str, request: StarletteRequest, _=Depends(require_admin)):
@@ -328,7 +336,7 @@ def admin_list_leads(_=Depends(require_admin), type: Optional[str]=None, status:
     sql = "SELECT data FROM leads"; conds = []; params = []
     if type: conds.append("type=%s"); params.append(type)
     if status: conds.append("status=%s"); params.append(status)
-    if q: conds.append("LOWER(data::text) LIKE %s"); params.append(f"%{q.lower()}%")
+    if q: conds.append("LOWER(CAST(data AS CHAR)) LIKE %s"); params.append(f"%{q.lower()}%")
     if conds: sql += " WHERE " + " AND ".join(conds)
     sql += " ORDER BY created_at DESC LIMIT %s"; params.append(limit)
     rows = db_fetch_all(sql, tuple(params))
@@ -362,7 +370,7 @@ def admin_export_csv(_=Depends(require_admin)):
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="leads-{datetime.now(timezone.utc).strftime("%Y%m%d")}.csv"'})
 
-# ── Media (stored in PostgreSQL) ──
+# ── Media (stored in MySQL LONGBLOB) ──
 @r.post("/admin/media/upload")
 async def admin_upload_media(file: UploadFile = File(...), _=Depends(require_admin)):
     ext = os.path.splitext(file.filename)[1].lower()
@@ -378,7 +386,7 @@ async def admin_upload_media(file: UploadFile = File(...), _=Depends(require_adm
                  "content_type": ct_map.get(ext, file.content_type), "url": f"/api/media/{orig_name}",
                  "created_at": datetime.now(timezone.utc).isoformat()}
     db_exec("INSERT INTO media (id,created_at,data,file_data) VALUES (%s,%s,%s,%s)",
-            (file_id, media_doc["created_at"], json.dumps(media_doc), psycopg2.Binary(contents)))
+            (file_id, media_doc["created_at"], json.dumps(media_doc), contents))
     return media_doc
 
 @r.get("/admin/media")
