@@ -206,19 +206,34 @@ def root():
 @r.get("/health")
 def health():
     """Debug endpoint to check DB connectivity and env vars."""
+    import socket, traceback
     info = {"db_host": DB_HOST, "db_name": DB_NAME, "db_user": DB_USER,
             "has_password": bool(DB_PASS), "db_port": DB_PORT}
+
+    # ── Step 1: raw TCP socket test (can Vercel even reach port 3306?) ──
+    try:
+        sock = socket.create_connection((DB_HOST, DB_PORT), timeout=8)
+        sock.close()
+        info["tcp_reachable"] = True
+    except Exception as sock_err:
+        info["tcp_reachable"] = False
+        info["tcp_error"] = str(sock_err)
+
+    # ── Step 2: full MySQL connect ──
     try:
         conn = get_db()
         info["db_connected"] = True
-        with conn.cursor() as cur:
+        with conn.cursor(cursor=pymysql.cursors.Cursor) as cur:
             cur.execute("SELECT COUNT(*) FROM cms_content")
             info["cms_rows"] = cur.fetchone()[0]
             cur.execute("SELECT COUNT(*) FROM leads")
             info["lead_rows"] = cur.fetchone()[0]
     except Exception as e:
         info["db_connected"] = False
+        info["db_error_type"] = type(e).__name__
+        info["db_error_args"] = str(e.args)
         info["db_error"] = str(e)
+        info["db_traceback"] = traceback.format_exc()[-800:]
     return info
 
 @r.post("/leads")
