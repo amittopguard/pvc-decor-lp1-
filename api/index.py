@@ -8,7 +8,9 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request as StarletteRequest
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import Optional, Literal
-import os, io, csv, hmac, hashlib, base64, json, uuid, logging, asyncio, urllib.parse
+import os, io, csv, hmac, hashlib, base64, json, uuid, logging, asyncio, time, urllib.parse
+from collections import deque
+from threading import Lock
 from datetime import datetime, timezone, timedelta
 from contextlib import contextmanager
 import pymysql
@@ -40,6 +42,39 @@ if RESEND_KEY and resend:
     resend.api_key = RESEND_KEY
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+# ── Rate limiting ──
+# Sliding-window limiter to blunt form-spam floods on the public lead
+# endpoints. Per client IP; configurable via env (LEADS_RATE_LIMIT=0 disables).
+LEADS_RATE_LIMIT = int(os.environ.get('LEADS_RATE_LIMIT', '30'))
+LEADS_RATE_WINDOW = int(os.environ.get('LEADS_RATE_WINDOW_SECONDS', '60'))
+_leads_hits = {}
+_leads_lock = Lock()
+
+def _client_ip(request: StarletteRequest) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+def rate_limit_leads(request: StarletteRequest):
+    if LEADS_RATE_LIMIT <= 0:
+        return
+    key = _client_ip(request)
+    now = time.monotonic()
+    with _leads_lock:
+        hits = _leads_hits.get(key)
+        if hits is None:
+            hits = deque()
+            _leads_hits[key] = hits
+        cutoff = now - LEADS_RATE_WINDOW
+        while hits and hits[0] <= cutoff:
+            hits.popleft()
+        if len(hits) >= LEADS_RATE_LIMIT:
+            retry_after = max(int(hits[0] + LEADS_RATE_WINDOW - now) + 1, 1)
+            raise HTTPException(429, "Too many submissions. Please wait a moment and try again.",
+                                headers={"Retry-After": str(retry_after)})
+        hits.append(now)
 
 # ── Database ──
 _conn = None
@@ -237,7 +272,7 @@ def health():
     return info
 
 @r.post("/leads")
-def create_lead(payload: LeadIn):
+def create_lead(payload: LeadIn, _rl: None = Depends(rate_limit_leads)):
     lead = Lead(**payload.model_dump())
     doc = lead.model_dump(); doc["created_at"] = doc["created_at"].isoformat()
     db_exec("INSERT INTO leads (id,type,status,created_at,data) VALUES (%s,%s,%s,%s,%s)",
@@ -253,6 +288,7 @@ async def create_comparison_lead(
     city: Optional[str] = Form(None), current_supplier: Optional[str] = Form(None),
     monthly_volume_sqm: Optional[str] = Form(None), product_interest: Optional[str] = Form(None),
     message: Optional[str] = Form(None), file: Optional[UploadFile] = File(None),
+    _rl: None = Depends(rate_limit_leads),
 ):
     file_meta = None
     file_bytes = None

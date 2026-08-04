@@ -45,7 +45,8 @@ User asked for guidance and flow of a landing page.
 - [ ] Replace KDIPL placeholder logo with actual logo.
 - [ ] Upload real PDF catalog and link from "Download Full Catalog" button.
 - [ ] Replace stock catalog images with real product textures.
-- [ ] Add rate-limit / hCaptcha to public /api/leads to prevent form spam.
+- [x] Add rate-limit to public /api/leads to prevent form spam (sliding-window, per-IP; env: LEADS_RATE_LIMIT / LEADS_RATE_WINDOW_SECONDS).
+- [ ] Add hCaptcha to public /api/leads for stronger bot protection.
 
 ### P1
 - [ ] Add certifications / client-logo strip (ISO, major brands).
