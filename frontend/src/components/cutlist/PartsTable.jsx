@@ -9,7 +9,15 @@ const num = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-export default function PartsTable({ parts, unit, showMaterial, colorFor, onChange }) {
+export default function PartsTable({
+  parts,
+  unit,
+  showMaterial,
+  colorFor,
+  onChange,
+  title = "Parts required",
+  subtitle,
+}) {
   const update = (id, patch) => onChange(parts.map((p) => (p.id === id ? { ...p, ...patch } : p)));
 
   const addRow = () => onChange([...parts, emptyPart()]);
@@ -47,8 +55,8 @@ export default function PartsTable({ parts, unit, showMaterial, colorFor, onChan
 
   return (
     <Panel
-      title="Parts required"
-      subtitle={`Dimensions in ${u.name.toLowerCase()}`}
+      title={title}
+      subtitle={subtitle || `Dimensions in ${u.name.toLowerCase()}`}
       actions={
         <ToolButton onClick={addRow} variant="ghost" title="Add a part row">
           <Plus className="h-4 w-4" /> Add

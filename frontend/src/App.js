@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Landing from "@/pages/Landing";
 import Admin from "@/pages/Admin";
 import CutList from "@/pages/CutList";
+import Flexo from "@/pages/Flexo";
 import { Toaster } from "sonner";
 import { initAnalytics } from "@/lib/analytics";
 
@@ -17,6 +18,8 @@ function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="/cutlist" element={<CutList />} />
           <Route path="/cut-list-optimizer" element={<CutList />} />
+          <Route path="/flexo" element={<Flexo />} />
+          <Route path="/label-optimizer" element={<Flexo />} />
         </Routes>
       </BrowserRouter>
       <Toaster position="top-right" richColors closeButton />

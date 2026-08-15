@@ -9,7 +9,15 @@ const num = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-export default function StockTable({ stock, unit, showMaterial, onChange }) {
+export default function StockTable({
+  stock,
+  unit,
+  showMaterial,
+  onChange,
+  title = "Stock sheets",
+  subtitle = "Quantity 0 means an unlimited supply",
+  presets,
+}) {
   const update = (id, patch) => onChange(stock.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   const addRow = () => onChange([...stock, emptyStock()]);
 
@@ -42,8 +50,8 @@ export default function StockTable({ stock, unit, showMaterial, onChange }) {
 
   return (
     <Panel
-      title="Stock sheets"
-      subtitle="Quantity 0 means an unlimited supply"
+      title={title}
+      subtitle={subtitle}
       actions={
         <ToolButton onClick={addRow} variant="ghost" title="Add a stock sheet size">
           <Plus className="h-4 w-4" /> Add
@@ -142,6 +150,26 @@ export default function StockTable({ stock, unit, showMaterial, onChange }) {
           </tbody>
         </table>
       </div>
+      {presets && presets.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-3 py-2">
+          <span className="text-[11px] uppercase tracking-wide text-slate-500">Standard sizes</span>
+          {presets.map((p) => (
+            <button
+              key={p.label}
+              type="button"
+              onClick={() =>
+                onChange([
+                  ...stock.filter((s) => num(s.length) > 0 && num(s.width) > 0),
+                  emptyStock({ length: p.length, width: p.width, label: p.label, qty: 0 }),
+                ])
+              }
+              className="border border-slate-300 px-2 py-0.5 text-xs text-slate-700 hover:border-orange-500 hover:text-orange-700"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      )}
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
         <span>
           {unlimited ? (
