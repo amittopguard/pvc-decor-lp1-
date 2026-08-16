@@ -6,6 +6,7 @@ import { Panel, ToolButton, IconButton } from "@/components/cutlist/fields";
 import RecordTable from "@/components/vault/RecordTable";
 import PlateEditor from "@/components/vault/PlateEditor";
 import VaultReports from "@/components/vault/VaultReports";
+import GeometryScan from "@/components/vault/GeometryScan";
 import {
   TOKEN_KEY,
   createPlate,
@@ -34,6 +35,7 @@ const TABS = [
   { id: "plates", label: "Plates" },
   { id: "dies", label: "KLD & moulds" },
   { id: "parties", label: "Customers & vendors" },
+  { id: "scan", label: "Geometry scan" },
   { id: "reports", label: "Reports" },
 ];
 
@@ -523,6 +525,8 @@ export default function Vault() {
             />
           </>
         )}
+
+        {tab === "scan" && <GeometryScan />}
 
         {tab === "reports" && (
           <VaultReports artworks={repArtworks} kld={repKld} reconciliation={repRecon} cost={repCost} />

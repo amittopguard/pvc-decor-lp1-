@@ -198,7 +198,16 @@ const waitFor = async (url, tries = 60) => {
   await tap("button:has-text('Artwork')");
   await page.waitForTimeout(400);
   for (const code of ["AW-1", "AW-2", "AW-3"]) {
-    await addRecord("Artwork", { Code: code, Name: `Label ${code}`, Customer: "Acme Foods (ACME)", KLD: "KLD-101", Mould: "MLD-77" });
+    await addRecord("Artwork", {
+      Code: code,
+      Name: `Label ${code}`,
+      Customer: "Acme Foods (ACME)",
+      KLD: "KLD-101",
+      Mould: "MLD-77",
+      // Matches KLD-101 exactly so the geometry scan starts clean.
+      Width: "100",
+      Height: "60",
+    });
   }
   await hideToasts();
   const artRows = await page.locator("section", { has: page.locator('h2:text-is("Artwork")') }).first().locator("tbody tr").count();
@@ -254,6 +263,60 @@ const waitFor = async (url, tries = 60) => {
   check("plate spend is reported", body.includes("₹12,000"), "");
   check("reconciliation reports everything clean", /Everything reconciles/.test(body), body.slice(0, 200));
   await page.screenshot({ path: path.join(SHOTS, "vault-reports.png"), fullPage: true });
+
+  console.log("\nLive geometry scan");
+  // The stat labels render before the first scan returns, so wait for a verdict.
+  const waitForScan = async () => {
+    await page.waitForSelector("text=Artwork scanned", { timeout: 20000 });
+    await page.waitForFunction(
+      () => {
+        const t = document.querySelector("main")?.innerText || "";
+        return !t.includes("Running the first scan") && /Every artwork matches|found/.test(t);
+      },
+      { timeout: 20000 }
+    );
+  };
+  await tap("button:has-text('Geometry scan')");
+  await waitForScan();
+  await hideToasts();
+  let scanText = await page.locator("main").innerText();
+  check("the scan reports what it checked", /artwork scanned[\s\S]{0,40}3/i.test(scanText), scanText.slice(0, 160));
+  check("a matching set scans clean", /Every artwork matches/.test(scanText), scanText.slice(0, 240));
+  check("the scan says it is live", /live[\s\S]{0,60}next scan in/i.test(scanText), scanText.slice(0, 160));
+
+  // Break one artwork's size and let the live scan pick it up on its own.
+  await tap("button:has-text('Artwork')");
+  await page.waitForTimeout(500);
+  const artPanel = page.locator("section", { has: page.locator('h2:text-is("Artwork")') }).first();
+  const firstRow = artPanel.locator("tbody tr").first();
+  await firstRow.locator("button[title='Edit']").dispatchEvent("click");
+  await page.waitForTimeout(300);
+  await firstRow.locator("[aria-label='edit Width']").fill("120");
+  await firstRow.locator("button[title='Save']").dispatchEvent("click");
+  await page.waitForTimeout(900);
+
+  await tap("button:has-text('Geometry scan')");
+  await waitForScan();
+  await hideToasts();
+  scanText = await page.locator("main").innerText();
+  check("a wrong size is caught by the scan", /does not match/i.test(scanText), scanText.slice(0, 300));
+  check("it shows expected against actual", /expected[\s\S]{0,40}100/.test(scanText), scanText.slice(0, 300));
+  check("the die is flagged for disagreeing sizes", /different sizes/i.test(scanText), scanText.slice(0, 300));
+  await page.screenshot({ path: path.join(SHOTS, "vault-scan.png"), fullPage: true });
+
+  // The live timer must clear it again once the record is fixed, with no reload.
+  await tap("button:has-text('Artwork')");
+  await page.waitForTimeout(500);
+  await firstRow.locator("button[title='Edit']").dispatchEvent("click");
+  await page.waitForTimeout(300);
+  await firstRow.locator("[aria-label='edit Width']").fill("100");
+  await firstRow.locator("button[title='Save']").dispatchEvent("click");
+  await page.waitForTimeout(900);
+  await tap("button:has-text('Geometry scan')");
+  await waitForScan();
+  await hideToasts();
+  scanText = await page.locator("main").innerText();
+  check("fixing the record clears the scan", /Every artwork matches/.test(scanText), scanText.slice(0, 300));
 
   console.log("\nGuards surface in the UI");
   await tap("button:has-text('Customers & vendors')");

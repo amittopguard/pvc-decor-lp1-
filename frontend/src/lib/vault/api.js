@@ -26,6 +26,8 @@ export const reportArtworks = (customerId) =>
 export const reportKld = () => unwrap(adminApi.get("/vault/reports/kld")).then((d) => d.items || []);
 export const reportReconciliation = () => unwrap(adminApi.get("/vault/reports/reconciliation"));
 export const reportCost = () => unwrap(adminApi.get("/vault/reports/cost"));
+export const reportGeometry = (tolerance = 0.5) =>
+  unwrap(adminApi.get(`/vault/reports/geometry?tolerance=${tolerance}`));
 
 export const listArtworkFiles = (artworkId) =>
   unwrap(adminApi.get(`/vault/artworks/${artworkId}/files`)).then((d) => d.items || []);

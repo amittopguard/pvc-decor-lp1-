@@ -563,6 +563,176 @@ def build(database, require_admin, upload_dir: Path):
             "kld_mismatches": [dict(r) for r in mismatched],
         }
 
+    @router.get("/reports/geometry")
+    async def report_geometry(
+        tolerance: float = 0.5,
+        min_web: float = 320.0,
+        max_web: float = 650.0,
+        gutter: float = 3.0,
+        margin: float = 5.0,
+        _: bool = Depends(require_admin),
+    ):
+        """
+        Geometric scan: does every artwork actually fit the die and mould it is
+        patched to, and does every die fit the press?
+
+        The reconciliation report compares which records point at which. This
+        one compares their dimensions, which is where the real trouble hides —
+        an artwork can be patched to the right KLD and still be the wrong size
+        for it.
+        """
+        tol = max(0.0, float(tolerance))
+        issues = []
+
+        def near(a, b):
+            return a is not None and b is not None and abs(float(a) - float(b)) <= tol
+
+        rows = await database.fetch_all(
+            """
+            SELECT a.id, a.code, a.name, a.width, a.height, a.die_id, a.mould_id,
+                   c.name AS customer_name,
+                   d.kld_number, d.label_width AS die_w, d.label_height AS die_h,
+                   d.ups_across, d.ups_around,
+                   mo.mould_code, mo.label_width AS mould_w, mo.label_height AS mould_h
+            FROM vault_artworks a
+            LEFT JOIN vault_customers c ON c.id = a.customer_id
+            LEFT JOIN vault_dies d ON d.id = a.die_id
+            LEFT JOIN vault_moulds mo ON mo.id = a.mould_id
+            ORDER BY c.name, a.code
+            """
+        )
+
+        checked = 0
+        for r in rows:
+            aw, ah = r["width"], r["height"]
+            label = f'{r["code"]}{" — " + r["name"] if r["name"] else ""}'
+
+            if aw is None or ah is None:
+                issues.append({
+                    "kind": "artwork_size_missing",
+                    "severity": "info",
+                    "subject": label,
+                    "customer": r["customer_name"],
+                    "message": "No size recorded, so it cannot be scanned.",
+                })
+                continue
+
+            checked += 1
+
+            for ref, code, rw, rh in (
+                ("KLD", r["kld_number"], r["die_w"], r["die_h"]),
+                ("mould", r["mould_code"], r["mould_w"], r["mould_h"]),
+            ):
+                if not code or rw is None or rh is None:
+                    continue
+                if near(aw, rw) and near(ah, rh):
+                    continue
+                turned = near(aw, rh) and near(ah, rw)
+                issues.append({
+                    "kind": "turned_against_reference" if turned else "size_mismatch",
+                    "severity": "warning" if turned else "error",
+                    "subject": label,
+                    "customer": r["customer_name"],
+                    "reference": f"{ref} {code}",
+                    "expected": f"{rw} x {rh}",
+                    "actual": f"{aw} x {ah}",
+                    "message": (
+                        f"Artwork is turned 90 degrees against {ref} {code}."
+                        if turned
+                        else f"Artwork does not match {ref} {code}."
+                    ),
+                })
+
+        # Every artwork on one die is cut by that die, so they must agree in size.
+        by_die = {}
+        for r in rows:
+            if not r["die_id"] or r["width"] is None or r["height"] is None:
+                continue
+            key = (round(float(r["width"]), 3), round(float(r["height"]), 3))
+            by_die.setdefault((r["die_id"], r["kld_number"]), {}).setdefault(key, []).append(r["code"])
+        for (die_id, kld), sizes in by_die.items():
+            if len(sizes) > 1:
+                detail = "; ".join(
+                    f'{w} x {h}: {", ".join(codes)}' for (w, h), codes in sorted(sizes.items())
+                )
+                issues.append({
+                    "kind": "die_sizes_disagree",
+                    "severity": "error",
+                    "subject": f"KLD {kld}",
+                    "message": f"Artworks on this die are different sizes — {detail}.",
+                })
+
+        # A die whose lanes cannot fit the press is a die that cannot be run.
+        dies = await database.fetch_all("SELECT * FROM vault_dies")
+        for d in dies:
+            if d["label_width"] is None or not d["ups_across"]:
+                continue
+            across = int(d["ups_across"])
+            needed = across * float(d["label_width"]) + max(0, across - 1) * gutter + 2 * margin
+            if needed > max_web + 1e-9:
+                issues.append({
+                    "kind": "wider_than_press",
+                    "severity": "error",
+                    "subject": f'KLD {d["kld_number"]}',
+                    "expected": f"at most {max_web}",
+                    "actual": f"{round(needed, 2)}",
+                    "message": (
+                        f"{across} across at {d['label_width']} needs {round(needed, 2)} mm, "
+                        f"wider than the {max_web} mm press."
+                    ),
+                })
+            elif needed < min_web - 1e-9:
+                issues.append({
+                    "kind": "narrower_than_minimum",
+                    "severity": "warning",
+                    "subject": f'KLD {d["kld_number"]}',
+                    "expected": f"at least {min_web}",
+                    "actual": f"{round(needed, 2)}",
+                    "message": (
+                        f"{across} across needs only {round(needed, 2)} mm, under the {min_web} mm "
+                        f"minimum print width — the run is charged at the minimum."
+                    ),
+                })
+
+        # A plate repeat has to hold the rows the die expects.
+        plates = await database.fetch_all(
+            """
+            SELECT p.plate_number, p.repeat_mm, d.kld_number, d.label_height, d.ups_around
+            FROM vault_plates p JOIN vault_dies d ON d.id = p.die_id
+            WHERE p.repeat_mm IS NOT NULL AND d.label_height IS NOT NULL AND d.ups_around IS NOT NULL
+            """
+        )
+        for p in plates:
+            needed = float(p["label_height"]) * int(p["ups_around"])
+            if float(p["repeat_mm"]) + 1e-9 < needed:
+                issues.append({
+                    "kind": "repeat_too_short",
+                    "severity": "error",
+                    "subject": f'Plate {p["plate_number"]}',
+                    "reference": f'KLD {p["kld_number"]}',
+                    "expected": f"at least {round(needed, 2)}",
+                    "actual": f'{p["repeat_mm"]}',
+                    "message": (
+                        f'{p["ups_around"]} rows of {p["label_height"]} need {round(needed, 2)} mm, '
+                        f'but the repeat is {p["repeat_mm"]} mm.'
+                    ),
+                })
+
+        counts = {"error": 0, "warning": 0, "info": 0}
+        for i in issues:
+            counts[i["severity"]] = counts.get(i["severity"], 0) + 1
+
+        return {
+            "scanned_at": _now(),
+            "artworks_total": len(rows),
+            "artworks_checked": checked,
+            "dies_total": len(dies),
+            "tolerance": tol,
+            "counts": counts,
+            "clean": counts["error"] == 0 and counts["warning"] == 0,
+            "issues": issues,
+        }
+
     @router.get("/reports/cost")
     async def report_cost(_: bool = Depends(require_admin)):
         """Plate spend by who paid, by vendor, and per customer via the plate lines."""

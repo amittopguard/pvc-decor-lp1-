@@ -317,7 +317,86 @@ def run(client):
     check("the header names the KLD column", "KLD" in body[0], body[0])
     check("customer names appear", any("Acme Foods" in line for line in body[1:]), body[1] if len(body) > 1 else "")
 
-    section("11. Unknown record types are rejected")
+    section("11. Geometric scan of artwork against KLD and mould")
+    scan = client.get("/vault/reports/geometry").json()
+    check("the scan runs and reports what it checked", scan["artworks_checked"] >= 3, str(scan["artworks_checked"]))
+    check("matching artwork raises nothing", not any(i["kind"] == "size_mismatch" for i in scan["issues"]), str(scan["issues"])[:200])
+
+    # An artwork that does not match the die it is patched to.
+    wrong = client.post(
+        "/vault/artworks",
+        json={"code": "AW-WRONG", "customer_id": customer["id"], "die_id": die["id"], "width": 120, "height": 80},
+    ).json()
+    scan = client.get("/vault/reports/geometry").json()
+    mismatch = [i for i in scan["issues"] if i["kind"] == "size_mismatch" and "AW-WRONG" in i["subject"]]
+    check("an artwork that does not fit its KLD is flagged", len(mismatch) == 1, str(scan["issues"])[:200])
+    check("the flag shows expected against actual", mismatch[0]["expected"] == "100.0 x 60.0" and mismatch[0]["actual"] == "120.0 x 80.0", str(mismatch[0]))
+    check("it is an error, not a warning", mismatch[0]["severity"] == "error")
+    check("artworks of different sizes on one die are flagged", any(i["kind"] == "die_sizes_disagree" for i in scan["issues"]))
+
+    # A turned artwork is a softer finding than a wrong size.
+    client.put(
+        f"/vault/artworks/{wrong['id']}",
+        json={"code": "AW-WRONG", "customer_id": customer["id"], "die_id": die["id"], "width": 60, "height": 100},
+    )
+    scan = client.get("/vault/reports/geometry").json()
+    turned = [i for i in scan["issues"] if i["kind"] == "turned_against_reference"]
+    check("an artwork turned 90 degrees is reported as turned", len(turned) == 1, str(scan["issues"])[:200])
+    check("turned is a warning", turned[0]["severity"] == "warning")
+    client.delete(f"/vault/artworks/{wrong['id']}")
+
+    # Tolerance lets a rounding difference pass.
+    close = client.post(
+        "/vault/artworks",
+        json={"code": "AW-CLOSE", "customer_id": customer["id"], "die_id": die["id"], "width": 100.3, "height": 60.2},
+    ).json()
+    tight = client.get("/vault/reports/geometry?tolerance=0.1").json()
+    loose = client.get("/vault/reports/geometry?tolerance=0.5").json()
+    check(
+        "a 0.3 difference fails a tight tolerance",
+        any("AW-CLOSE" in i["subject"] for i in tight["issues"] if i["kind"] == "size_mismatch"),
+    )
+    check(
+        "and passes a 0.5 tolerance",
+        not any("AW-CLOSE" in i["subject"] for i in loose["issues"] if i["kind"] == "size_mismatch"),
+    )
+    client.delete(f"/vault/artworks/{close['id']}")
+
+    # A die too wide for the press cannot be run.
+    fat = client.post(
+        "/vault/dies", json={"kld_number": "KLD-FAT", "label_width": 200, "label_height": 60, "ups_across": 4}
+    ).json()
+    scan = client.get("/vault/reports/geometry").json()
+    wide = [i for i in scan["issues"] if i["kind"] == "wider_than_press"]
+    check("a die wider than the press is flagged", len(wide) == 1 and "KLD-FAT" in wide[0]["subject"], str(wide))
+    narrow = client.post(
+        "/vault/dies", json={"kld_number": "KLD-THIN", "label_width": 50, "label_height": 40, "ups_across": 2}
+    ).json()
+    scan = client.get("/vault/reports/geometry").json()
+    check(
+        "a die under the minimum print width is a warning",
+        any(i["kind"] == "narrower_than_minimum" and "KLD-THIN" in i["subject"] for i in scan["issues"]),
+    )
+    client.delete(f"/vault/dies/{fat['id']}")
+    client.delete(f"/vault/dies/{narrow['id']}")
+
+    # A repeat that cannot hold the rows the die expects.
+    short = client.post(
+        "/vault/plates", json={"plate_number": "PL-SHORT", "die_id": die["id"], "repeat_mm": 100}
+    ).json()
+    scan = client.get("/vault/reports/geometry").json()
+    check(
+        "a repeat too short for the die's rows is flagged",
+        any(i["kind"] == "repeat_too_short" and "PL-SHORT" in i["subject"] for i in scan["issues"]),
+        str([i["kind"] for i in scan["issues"]]),
+    )
+    client.delete(f"/vault/plates/{short['id']}")
+
+    scan = client.get("/vault/reports/geometry").json()
+    check("with the bad records gone the scan is clean", scan["clean"] is True, str(scan["counts"]))
+    check("an artwork with no size is reported as unscannable", scan["artworks_total"] >= scan["artworks_checked"])
+
+    section("12. Unknown record types are rejected")
     check("an unknown entity 404s", client.get("/vault/widgets").status_code == 404)
 
 
