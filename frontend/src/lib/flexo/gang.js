@@ -100,6 +100,7 @@ export function solveGang({
   edgeMargin = 0,
   pitch = 3.175,
   plateTolerance = DEFAULT_PLATE_TOLERANCE,
+  minSkus = 2,
   timeBudgetMs = 4000,
   limit = 20,
 } = {}) {
@@ -118,8 +119,8 @@ export function solveGang({
     }));
 
   const errors = [];
-  if (list.length < 2) errors.push("Add at least two SKUs to plan a gang run.");
-  if (list.length > 8) errors.push("Gang planning is limited to 8 SKUs at a time.");
+  if (list.length < minSkus) errors.push("Add at least two SKUs to plan a gang run.");
+  if (list.length > 16) errors.push("Gang planning is limited to 16 SKUs on one plate.");
   const useRange = !!webRange && num(webRange.max) > 0;
   const rangeMin = useRange ? Math.max(0, num(webRange.min)) : 0;
   const rangeMax = useRange ? num(webRange.max) : 0;
@@ -137,17 +138,50 @@ export function solveGang({
   const margin = Math.max(0, num(edgeMargin));
   const toothPitch = num(pitch) > 0 ? num(pitch) : 3.175;
 
-  // Every combination of per-SKU orientations.
-  const orientationSets = [[]];
-  for (const sku of list) {
-    const next = [];
-    for (const partial of orientationSets) {
-      next.push([...partial, false]);
-      if (sku.canRotate && Math.abs(sku.w - sku.h) > EPS) next.push([...partial, true]);
+  const canFlip = (sku) => sku.canRotate && Math.abs(sku.w - sku.h) > EPS;
+
+  /** Every combination — only affordable for a handful of SKUs. */
+  function allOrientationSets() {
+    let sets = [[]];
+    for (const sku of list) {
+      const next = [];
+      for (const partial of sets) {
+        next.push([...partial, false]);
+        if (canFlip(sku)) next.push([...partial, true]);
+      }
+      sets = next;
     }
-    orientationSets.length = 0;
-    orientationSets.push(...next);
+    return sets;
   }
+
+  /**
+   * For a dozen SKUs the full product is millions of combinations, so pick a
+   * few strategies that between them cover what actually matters: keep every
+   * SKU as it is, turn them all, make each one as narrow as possible (more
+   * lanes fit), or give each one the most rows around.
+   */
+  function strategyOrientationSets(repeat) {
+    const natural = list.map(() => false);
+    const turned = list.map((sku) => canFlip(sku));
+    const narrow = list.map((sku) => canFlip(sku) && sku.h < sku.w);
+    const dense = list.map((sku) => {
+      if (!canFlip(sku)) return false;
+      const asIs = aroundFit(repeat, sku.h, minGapAround);
+      const flipped = aroundFit(repeat, sku.w, minGapAround);
+      if (!flipped) return false;
+      if (!asIs) return true;
+      return flipped.count > asIs.count;
+    });
+    const seen = new Set();
+    return [natural, turned, narrow, dense].filter((set) => {
+      const key = set.map((f) => (f ? "1" : "0")).join("");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  const enumerateAll = list.length <= 6;
 
   const options = [];
   let combos = 0;
@@ -162,6 +196,8 @@ export function solveGang({
 
     for (const teeth of teethList) {
       const repeat = teeth * toothPitch;
+
+      const orientationSets = enumerateAll ? allOrientationSets() : strategyOrientationSets(repeat);
 
       for (const flips of orientationSets) {
         if (Date.now() > deadline) break outer;

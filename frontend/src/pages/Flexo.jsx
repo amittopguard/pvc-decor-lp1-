@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Play, Printer, RotateCcw, Sparkles, Tag } from "lucide-react";
+import { FileText, Loader2, Play, Printer, RotateCcw, Sparkles, Tag } from "lucide-react";
 import { toast } from "sonner";
 import PressSettings from "@/components/flexo/PressSettings";
 import StepRepeatResults from "@/components/flexo/StepRepeatResults";
@@ -11,7 +11,8 @@ import { colorForIndex } from "@/components/cutlist/SheetDiagram";
 import { CheckCell, IconButton, NumberCell, Panel, TextCell, ToolButton } from "@/components/cutlist/fields";
 import { Lock, Plus, RotateCw, Trash2 } from "lucide-react";
 import { solveStepRepeat, getPitch } from "@/lib/flexo/layout";
-import { solveGang } from "@/lib/flexo/gang";
+import { solvePlateSets } from "@/lib/flexo/plates";
+import { exportGangReport } from "@/lib/flexo/report";
 import { optimize } from "@/lib/cutlist/optimizer";
 import { convert, getUnit } from "@/lib/cutlist/units";
 import { emptyPart, emptyStock, newId } from "@/lib/cutlist/project";
@@ -245,11 +246,15 @@ export default function Flexo() {
         if (res.ok) toast.success(`${res.best.across} × ${res.best.around} on a ${res.best.teeth}T cylinder`);
         else toast.error(res.errors[0]);
       } else if (tab === "gang") {
-        const res = solveGang({ ...pressArgs(), skus: project.skus });
+        const res = solvePlateSets({ ...pressArgs(), skus: project.skus });
         setGangResult(res);
         setSelectedGang(0);
-        if (res.ok) toast.success(`${res.best.totalLanes} lanes, ${res.best.totalOverrun.toLocaleString()} labels over`);
-        else toast.error(res.errors[0]);
+        if (res.ok) {
+          const p = res.totals.plates;
+          toast.success(`${p} plate${p === 1 ? "" : "s"}, ${res.totals.overrun.toLocaleString()} labels over`);
+        } else {
+          toast.error(res.errors[0]);
+        }
       } else {
         const res = optimize({
           parts: project.plates.parts,
@@ -268,6 +273,27 @@ export default function Flexo() {
       setBusy(false);
     }
   }, [tab, pressArgs, project]);
+
+  const exportReport = () => {
+    if (!gangResult || !gangResult.ok) {
+      toast.error("Calculate a gang plan first.");
+      return;
+    }
+    try {
+      exportGangReport({
+        result: gangResult,
+        press: project.press,
+        unit,
+        skus: project.skus,
+        projectName: `${gangResult.totals.skus} SKUs, ${gangResult.totals.plates} plate${gangResult.totals.plates === 1 ? "" : "s"}`,
+      });
+      toast.success("Report downloaded.");
+    } catch (err) {
+      toast.error("Could not build the report.");
+      // eslint-disable-next-line no-console
+      console.error(err);
+    }
+  };
 
   const changeUnit = (next) => {
     if (next === unit) return;
@@ -347,6 +373,11 @@ export default function Flexo() {
             >
               <Sparkles className="h-4 w-4" /> Sample
             </ToolButton>
+            {tab === "gang" && (
+              <ToolButton onClick={exportReport} disabled={!gangResult || !gangResult.ok} title="Download the full report as a PDF">
+                <FileText className="h-4 w-4" /> Export PDF
+              </ToolButton>
+            )}
             <ToolButton onClick={() => window.print()}>
               <Printer className="h-4 w-4" /> Print
             </ToolButton>
@@ -513,8 +544,6 @@ export default function Flexo() {
               unit={unit}
               margin={parseFloat(project.press.edgeMargin) || 0}
               gapAcross={parseFloat(project.press.gapAcross) || 0}
-              selected={selectedGang}
-              onSelect={setSelectedGang}
               colorOf={colorOf}
             />
           )}

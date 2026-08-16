@@ -116,15 +116,59 @@ const check = (name, ok, detail) => {
   await tap("button:has-text('Gang run')");
   await page.waitForTimeout(200);
   await tap("button:has-text('Calculate')");
-  await page.waitForSelector("text=Per SKU", { timeout: 30000 });
+  await page.waitForSelector("text=Plate 1 of", { timeout: 30000 });
   await hideToasts();
-  const laneRows = await page.$$eval("table tbody tr", (e) => e.length);
+  const laneRows = await page.$$eval("article table tbody tr", (e) => e.length);
   const gangStats = await page.$$eval(".font-display.text-xl", (e) => e.map((x) => x.textContent));
-  const printed = await page.$$eval("table tbody tr td:nth-child(6)", (e) => e.map((x) => x.textContent.trim()));
-  check("lane total is reported", /^\d+$/.test(gangStats[0]), gangStats[0]);
+  const printed = await page.$$eval("article table tbody tr td:nth-child(6)", (e) => e.map((x) => x.textContent.trim()));
+  check("plate count is reported", /^\d+$/.test(gangStats[0]), gangStats[0]);
   check("every SKU has a row", laneRows >= 3, `${laneRows} rows`);
   check("printed quantities are filled in", printed.filter((t) => /\d/.test(t)).length >= 3, printed.join(" | "));
   await page.screenshot({ path: path.join(SHOTS, "flexo-gang.png") });
+
+  console.log("\nMulti-plate gang and PDF report");
+  // Ten wide SKUs cannot share one plate, so the planner must split them.
+  await page.evaluate(() => {
+    const skus = Array.from({ length: 10 }, (_, i) => ({
+      id: `bulk-${i}`,
+      name: `Label ${i + 1}`,
+      width: 90 + (i % 3) * 15,
+      height: 50 + (i % 4) * 10,
+      qty: 20000 + i * 6000,
+      canRotate: true,
+      enabled: true,
+    }));
+    const raw = JSON.parse(window.localStorage.getItem("flexo.project.v1"));
+    window.localStorage.setItem("flexo.project.v1", JSON.stringify({ ...raw, skus, tab: "gang" }));
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector("h1:has-text('Flexo Label Optimizer')");
+  await tap("button:has-text('Calculate')");
+  await page.waitForSelector("text=Plate 1 of", { timeout: 40000 });
+  await hideToasts();
+
+  const plateHeads = await page.$$eval("article h3", (els) => els.map((e) => e.textContent.trim()));
+  check("the job is split across multiple plates", plateHeads.length > 1, `${plateHeads.length} plates`);
+  check("plates are numbered", /^Plate 1 of \d+/.test(plateHeads[0]), plateHeads[0]);
+  const skuRows = await page.$$eval("article table tbody tr", (els) => els.length);
+  check("all ten SKUs appear across the plates", skuRows === 10, `${skuRows} rows`);
+  const splitNotice = await page.$("text=will not fit one plate");
+  check("the split is explained", !!splitNotice);
+  await page.screenshot({ path: path.join(SHOTS, "flexo-plates-split.png"), fullPage: true });
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download", { timeout: 20000 }),
+    tap("button:has-text('Export PDF')"),
+  ]);
+  const pdfPath = path.join(SHOTS, "flexo-report.pdf");
+  await download.saveAs(pdfPath);
+  const pdfBytes = fs.readFileSync(pdfPath);
+  const pdfText = pdfBytes.toString("latin1");
+  check("a PDF is downloaded", pdfBytes.length > 1000, `${pdfBytes.length} bytes`);
+  check("it is a valid PDF header", pdfText.startsWith("%PDF-"));
+  const pageCount = parseInt((pdfText.match(/\/Count (\d+)/) || [])[1] || "0", 10);
+  check("it has a page per plate plus the summary", pageCount === plateHeads.length + 1, `${pageCount} pages for ${plateHeads.length} plates`);
+  check("the report names the labels", pdfText.includes("Label 1"), "SKU names missing from the PDF");
 
   console.log("\nPlate nesting");
   await tap("button:has-text('Plate nesting')");

@@ -1,0 +1,223 @@
+/**
+ * Verification for multi-plate gang planning and the PDF writer.
+ *
+ *   node tests/flexo_plates.test.cjs
+ */
+const fs = require("fs");
+const path = require("path");
+const vm = require("vm");
+
+const LIB = path.join(__dirname, "..", "frontend", "src", "lib");
+
+function load() {
+  const strip = (file) =>
+    fs.readFileSync(file, "utf8").replace(/^import[\s\S]*?;$/gm, "").replace(/^export /gm, "");
+
+  const source = `
+    const layout = (function () {
+      ${strip(path.join(LIB, "flexo", "layout.js"))}
+      return { solveStepRepeat, aroundFit, acrossFit, cylinderTeeth, widthOptions, round, DEFAULT_PLATE_TOLERANCE };
+    })();
+    const gang = (function () {
+      const { aroundFit, cylinderTeeth, round, DEFAULT_PLATE_TOLERANCE } = layout;
+      ${strip(path.join(LIB, "flexo", "gang.js"))}
+      return { solveGang };
+    })();
+    const plates = (function () {
+      const { solveGang } = gang;
+      const { round } = layout;
+      ${strip(path.join(LIB, "flexo", "plates.js"))}
+      return { solvePlateSets, minimumWidth };
+    })();
+    const pdf = (function () {
+      ${strip(path.join(LIB, "pdf", "minipdf.js"))}
+      return { createPdf, sanitise, textWidth };
+    })();
+    module.exports = { ...layout, ...gang, ...plates, pdf };
+  `;
+  const sandbox = { module: { exports: {} }, console, Date, Blob: class {}, URL: {}, document: {} };
+  vm.createContext(sandbox);
+  vm.runInContext(source, sandbox, { filename: "flexo-plates.js" });
+  return sandbox.module.exports;
+}
+
+const { solvePlateSets, minimumWidth, pdf } = load();
+
+let failures = 0;
+let checks = 0;
+const check = (name, ok, detail) => {
+  checks++;
+  if (ok) console.log(`  ok   ${name}`);
+  else {
+    failures++;
+    console.log(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
+  }
+};
+const section = (n) => console.log(`\n${n}`);
+
+const PRESS = {
+  webRange: { min: 320, max: 650 },
+  cylinders: { teeth: [96, 104, 112, 120, 128, 136] },
+  gapAcross: 3,
+  gapAround: 3,
+  edgeMargin: 5,
+  pitch: 3.175,
+};
+
+/** Ten SKUs too wide to share one 650 mm plate. */
+const TEN_WIDE = Array.from({ length: 10 }, (_, i) => ({
+  id: `s${i}`,
+  name: `Label ${i + 1}`,
+  width: 90 + (i % 3) * 15,
+  height: 50 + (i % 4) * 10,
+  qty: 20000 + i * 6000,
+  canRotate: true,
+}));
+
+/* ------------------------------------------------------------------ */
+
+section("1. Ten wide SKUs are split across several plates");
+{
+  const single = minimumWidth(TEN_WIDE, 3, 5);
+  check(
+    "all ten at one lane each are wider than the press",
+    single > 650,
+    `${single.toFixed(0)} mm needed, press is 650`
+  );
+
+  const r = solvePlateSets({ ...PRESS, skus: TEN_WIDE });
+  check("solves", r.ok === true, (r.errors || []).join(", "));
+  check("more than one plate is planned", r.totals.plates > 1, `${r.totals.plates} plates`);
+  check("every SKU is placed exactly once", (() => {
+    const ids = r.plates.flatMap((p) => p.plan.lanes.map((l) => l.id));
+    return ids.length === TEN_WIDE.length && new Set(ids).size === TEN_WIDE.length;
+  })(), "SKUs missing or duplicated across plates");
+  check(
+    "every plate fits the press width",
+    r.plates.every((p) => p.plan.webWidth <= 650 + 1e-9 && p.plan.webWidth >= 320 - 1e-9),
+    r.plates.map((p) => p.plan.webWidth).join(", ")
+  );
+  check(
+    "every SKU meets its ordered quantity",
+    r.plates.every((p) => p.plan.lanes.every((l) => l.printed >= l.ordered))
+  );
+  check(
+    "totals match the sum of the plates",
+    Math.abs(r.totals.materialArea - r.plates.reduce((s, p) => s + p.plan.materialArea, 0)) < 1,
+    `${r.totals.materialArea}`
+  );
+  check(
+    "ordered total matches the input",
+    r.totals.ordered === TEN_WIDE.reduce((s, x) => s + x.qty, 0),
+    `${r.totals.ordered}`
+  );
+  check("overrun is printed minus ordered", r.totals.overrun === r.totals.printed - r.totals.ordered);
+  check("a grouping strategy is reported", typeof r.strategy === "string" && r.strategy.length > 0);
+  console.log(
+    `       → ${r.totals.plates} plates, widths ${r.plates.map((p) => Math.round(p.plan.webWidth)).join(" / ")}, ` +
+      `overrun ${(r.totals.overrunPct * 100).toFixed(1)}%`
+  );
+}
+
+section("2. A job that does fit stays on one plate");
+{
+  const narrow = Array.from({ length: 4 }, (_, i) => ({
+    id: `n${i}`,
+    name: `Small ${i + 1}`,
+    width: 40,
+    height: 30,
+    qty: 40000,
+    canRotate: true,
+  }));
+  const r = solvePlateSets({ ...PRESS, skus: narrow });
+  check("solves", r.ok === true, (r.errors || []).join(", "));
+  check("uses a single plate", r.totals.plates === 1, `${r.totals.plates} plates`);
+  check("all four SKUs share it", r.plates[0].plan.lanes.length === 4);
+}
+
+section("3. A single SKU is still planned");
+{
+  const r = solvePlateSets({ ...PRESS, skus: [{ id: "a", name: "Only", width: 100, height: 60, qty: 50000 }] });
+  check("solves", r.ok === true, (r.errors || []).join(", "));
+  check("one plate, one SKU", r.totals.plates === 1 && r.plates[0].plan.lanes.length === 1);
+  check("it meets the order", r.plates[0].plan.lanes[0].printed >= 50000);
+}
+
+section("4. A SKU wider than the press is rejected clearly");
+{
+  const r = solvePlateSets({
+    ...PRESS,
+    skus: [
+      { id: "a", name: "Giant", width: 900, height: 800, qty: 1000, canRotate: true },
+      { id: "b", name: "Fine", width: 100, height: 60, qty: 1000 },
+    ],
+  });
+  check("reports failure rather than looping", r.ok === false);
+  check("the error names the offending SKU", r.errors.join(" ").includes("Giant"), r.errors.join(" "));
+}
+
+section("5. Sixteen SKUs stay inside the time budget");
+{
+  const many = Array.from({ length: 16 }, (_, i) => ({
+    id: `m${i}`,
+    name: `SKU ${i + 1}`,
+    width: 60 + (i % 5) * 12,
+    height: 40 + (i % 3) * 15,
+    qty: 10000 + i * 3000,
+    canRotate: true,
+  }));
+  const t0 = Date.now();
+  const r = solvePlateSets({ ...PRESS, skus: many, timeBudgetMs: 8000 });
+  const ms = Date.now() - t0;
+  check(`solves 16 SKUs (${ms}ms)`, r.ok === true, (r.errors || []).join(", "));
+  check("finishes inside the budget", ms < 12000, `${ms}ms`);
+  check("every SKU is placed once", (() => {
+    const ids = r.plates.flatMap((p) => p.plan.lanes.map((l) => l.id));
+    return ids.length === many.length && new Set(ids).size === many.length;
+  })());
+  console.log(`       → ${r.totals.plates} plates in ${ms}ms`);
+}
+
+section("6. PDF writer produces a structurally valid file");
+{
+  const doc = pdf.createPdf({ title: "Test report" });
+  doc.text(40, 40, "Flexo gang run report", { size: 16, bold: true });
+  doc.text(40, 60, "100 × 60 label — ×²—’ folded to ASCII", { size: 10 });
+  doc.rect(40, 80, 200, 100, { fill: "#bfdbfe", stroke: "#0f172a" });
+  doc.line(40, 200, 400, 200, { color: "#dc2626", dash: "3 2" });
+  doc.addPage();
+  doc.text(40, 40, "Plate 2", { size: 14, bold: true });
+  const bytes = doc.toBytes();
+  const text = Buffer.from(bytes).toString("latin1");
+
+  check("starts with a PDF header", text.startsWith("%PDF-1.4"));
+  check("ends with the EOF marker", text.trimEnd().endsWith("%%EOF"));
+  check("declares both pages", /\/Count 2\b/.test(text), text.match(/\/Count \d+/)?.[0]);
+  check("embeds both Helvetica faces", text.includes("/Helvetica") && text.includes("/Helvetica-Bold"));
+  check("non-Latin characters are folded, not dropped", text.includes("100 x 60"), "the multiplication sign survived");
+  check("no raw multiplication sign reaches the file", !text.includes("×"));
+
+  // Every xref offset must land on its object header.
+  const xrefStart = parseInt(text.slice(text.lastIndexOf("startxref") + 9).trim(), 10);
+  check("startxref points at the xref table", text.slice(xrefStart, xrefStart + 4) === "xref", `${xrefStart}`);
+  const xref = text.slice(xrefStart);
+  const entries = [...xref.matchAll(/^(\d{10}) 00000 n $/gm)].map((m) => parseInt(m[1], 10));
+  check("an xref entry exists for every object", entries.length >= 7, `${entries.length} entries`);
+  const misaligned = entries.filter((off, i) => !new RegExp(`^${i + 1} 0 obj`).test(text.slice(off, off + 20)));
+  check("every offset lands on its object", misaligned.length === 0, `${misaligned.length} misaligned`);
+  check("the file is a sane size", bytes.length > 700 && bytes.length < 400000, `${bytes.length} bytes`);
+
+  fs.writeFileSync(path.join(require("os").tmpdir(), "minipdf-sample.pdf"), bytes);
+}
+
+section("7. Text measurement is usable for layout");
+{
+  const wide = pdf.textWidth("WWWWW", 10);
+  const thin = pdf.textWidth("iiiii", 10);
+  check("wide glyphs measure wider than narrow ones", wide > thin * 2, `${wide} vs ${thin}`);
+  check("bold measures at least as wide as regular", pdf.textWidth("Hello", 10, true) >= pdf.textWidth("Hello", 10));
+  check("an empty string measures zero", pdf.textWidth("", 10) === 0);
+}
+
+console.log(`\n${checks - failures}/${checks} checks passed`);
+process.exit(failures === 0 ? 0 : 1);
