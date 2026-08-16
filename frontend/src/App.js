@@ -5,6 +5,7 @@ import Landing from "@/pages/Landing";
 import Admin from "@/pages/Admin";
 import CutList from "@/pages/CutList";
 import Flexo from "@/pages/Flexo";
+import Vault from "@/pages/Vault";
 import { Toaster } from "sonner";
 import { initAnalytics } from "@/lib/analytics";
 
@@ -20,6 +21,7 @@ function App() {
           <Route path="/cut-list-optimizer" element={<CutList />} />
           <Route path="/flexo" element={<Flexo />} />
           <Route path="/label-optimizer" element={<Flexo />} />
+          <Route path="/vault" element={<Vault />} />
         </Routes>
       </BrowserRouter>
       <Toaster position="top-right" richColors closeButton />
