@@ -1,6 +1,7 @@
 import React from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { CheckCell, IconButton, NumberCell, Panel, TextCell, ToolButton } from "@/components/cutlist/fields";
+import LayoutKey from "./LayoutKey";
 import { PITCHES, cylinderTeeth, getPitch } from "@/lib/flexo/layout";
 import { convert, formatLength, getUnit } from "@/lib/cutlist/units";
 
@@ -230,6 +231,8 @@ export default function PressSettings({ press, unit, onChange, newWeb }) {
           </span>
         </label>
       </Panel>
+
+      <LayoutKey />
     </>
   );
 }

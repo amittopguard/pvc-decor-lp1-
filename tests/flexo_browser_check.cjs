@@ -81,16 +81,19 @@ const check = (name, ok, detail) => {
     const t = m.text();
     if (m.type() === "error" && !/ERR_(TUNNEL|CONNECTION|NAME|INTERNET)/.test(t)) errors.push(`console: ${t.slice(0, 200)}`);
   });
-  const hideToasts = () => page.addStyleTag({ content: "[data-sonner-toaster]{display:none !important}" });
+  const tap = (selector) => page.locator(selector).first().dispatchEvent("click");
+  const hideToasts = () => page.addStyleTag({
+    content: '[data-sonner-toaster],section[aria-label^="Notifications"]{display:none !important}',
+  });
 
   await page.goto(`http://localhost:${PORT}/flexo`, { waitUntil: "networkidle" });
   await page.waitForSelector("h1:has-text('Flexo Label Optimizer')");
   // Start from the built-in sample so a stored project cannot skew the run.
-  await page.click("button:has-text('Sample')");
+  await tap("button:has-text('Sample')");
   await page.waitForTimeout(300);
 
   console.log("\nStep & repeat");
-  await page.click("button:has-text('Calculate')");
+  await tap("button:has-text('Calculate')");
   await page.waitForSelector("text=One repeat", { timeout: 20000 });
   await hideToasts();
   const srStats = await page.$$eval(".font-display.text-xl", (e) => e.map((x) => x.textContent));
@@ -110,9 +113,9 @@ const check = (name, ok, detail) => {
   check("clicking an alternative previews it", before !== after, "diagram did not change");
 
   console.log("\nGang run");
-  await page.click("button:has-text('Gang run')");
+  await tap("button:has-text('Gang run')");
   await page.waitForTimeout(200);
-  await page.click("button:has-text('Calculate')");
+  await tap("button:has-text('Calculate')");
   await page.waitForSelector("text=Per SKU", { timeout: 30000 });
   await hideToasts();
   const laneRows = await page.$$eval("table tbody tr", (e) => e.length);
@@ -124,9 +127,9 @@ const check = (name, ok, detail) => {
   await page.screenshot({ path: path.join(SHOTS, "flexo-gang.png") });
 
   console.log("\nPlate nesting");
-  await page.click("button:has-text('Plate nesting')");
+  await tap("button:has-text('Plate nesting')");
   await page.waitForTimeout(200);
-  await page.click("button:has-text('Calculate')");
+  await tap("button:has-text('Calculate')");
   await page.waitForSelector("text=Sheet 1 of", { timeout: 20000 });
   await hideToasts();
   const plateSheets = await page.$$eval("article h3", (e) => e.length);
@@ -135,8 +138,22 @@ const check = (name, ok, detail) => {
   check("standard plate sizes are offered", presets > 0);
   await page.screenshot({ path: path.join(SHOTS, "flexo-plates.png") });
 
+  console.log("\nLayout key");
+  await tap("button:has-text('Step & repeat')");
+  await page.waitForTimeout(150);
+  await tap("button:has-text('What these measurements mean')");
+  await page.waitForTimeout(250);
+  const keyLabels = await page.$$eval("section svg[role='img'] text", (els) => els.map((e) => e.textContent.trim()));
+  const wanted = ["web width — what you slit to", "gutter across", "gap around", "edge margin", "one repeat", "label width"];
+  check(
+    "the diagram key names every setting",
+    wanted.every((w) => keyLabels.some((t) => t === w)),
+    `missing: ${wanted.filter((w) => !keyLabels.some((t) => t === w)).join(", ")}`
+  );
+  await page.screenshot({ path: path.join(SHOTS, "flexo-key.png") });
+
   console.log("\nUnits and layout");
-  await page.click("button:has-text('Step & repeat')");
+  await tap("button:has-text('Step & repeat')");
   await page.waitForTimeout(150);
   await page.selectOption("header select", "in");
   await page.waitForTimeout(300);

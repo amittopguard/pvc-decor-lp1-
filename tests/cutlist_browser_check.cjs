@@ -70,7 +70,9 @@ const check = (name, ok, detail) => {
 
 /** Hide the toast layer with CSS; removing its nodes would break React. */
 const hideToasts = (page) =>
-  page.addStyleTag({ content: "[data-sonner-toaster]{display:none !important}" });
+  page.addStyleTag({
+    content: '[data-sonner-toaster],section[aria-label^="Notifications"]{display:none !important}',
+  });
 
 (async () => {
   if (!fs.existsSync(path.join(BUILD, "index.html"))) {
