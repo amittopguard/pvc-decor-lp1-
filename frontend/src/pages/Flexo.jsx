@@ -46,7 +46,10 @@ const DEFAULT_PROJECT = () => ({
   label: { width: 100, height: 60, canRotate: true },
   quantity: 100000,
   press: {
-    webs: [newWeb({ width: 330, label: "330 slit" }), newWeb({ width: 250, label: "250 slit" })],
+    webMode: "range",
+    minWidth: 320,
+    maxWidth: 650,
+    webs: [newWeb({ width: 330, label: "330 slit" }), newWeb({ width: 430, label: "430 slit" })],
     cylinderMode: "list",
     teethList: "96, 104, 112, 120, 128, 136",
     minTeeth: 60,
@@ -210,8 +213,10 @@ export default function Flexo() {
 
   const pressArgs = useCallback(() => {
     const p = project.press;
+    const range = (p.webMode || "range") === "range";
     return {
-      webs: p.webs,
+      webs: range ? [] : p.webs,
+      webRange: range ? { min: p.minWidth, max: p.maxWidth } : null,
       cylinders:
         p.cylinderMode === "list"
           ? { teeth: String(p.teethList || "").split(/[,\s]+/).filter(Boolean) }

@@ -92,7 +92,12 @@ export default function StepRepeatResults({ result, unit, margin, selected, onSe
           sub={penalty > 0.0001 ? `${formatPercent(penalty, 1)} above best` : "cheapest option"}
           tone={penalty > 0.02 ? "warn" : "good"}
         />
-        <Stat label="Web" value={`${formatLength(option.webWidth, unit)}`} sub={option.webLabel} />
+        <Stat
+          label="Slit to"
+          value={`${formatLength(option.webWidth, unit)} ${u.label}`}
+          tone={option.belowMinimum ? "warn" : "default"}
+          sub={option.belowMinimum ? "minimum print width" : `${option.across} lanes wide`}
+        />
         {quantity > 0 ? (
           <Stat
             label="Run"
@@ -125,6 +130,12 @@ export default function StepRepeatResults({ result, unit, margin, selected, onSe
             unit={unit}
             margin={margin}
           />
+          {option.belowMinimum && (
+            <p className="mt-2 text-center text-xs text-orange-700">
+              These lanes need less than the minimum print width, so the run is charged at the minimum and the spare
+              width is trim. More lanes, or a wider label, would use it.
+            </p>
+          )}
           <p className="mt-2 text-center text-xs text-slate-500">
             Faded rows are the next repeat — the cylinder is continuous, so leftover repeat becomes gap, not waste.
             Red edges are trim.

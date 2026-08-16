@@ -42,54 +42,101 @@ export default function PressSettings({ press, unit, onChange, newWeb }) {
   return (
     <>
       <Panel
-        title="Web widths"
-        subtitle="Add every slit width you can run — the search picks the cheapest"
+        title="Print width"
+        subtitle="The press slits to fit — anything under the minimum still costs the minimum"
         actions={
-          <ToolButton variant="ghost" onClick={() => set({ webs: [...press.webs, newWeb()] })}>
-            <Plus className="h-4 w-4" /> Add
-          </ToolButton>
+          press.webMode === "list" ? (
+            <ToolButton variant="ghost" onClick={() => set({ webs: [...press.webs, newWeb()] })}>
+              <Plus className="h-4 w-4" /> Add
+            </ToolButton>
+          ) : null
         }
       >
-        <div className="relative overflow-x-auto">
-          <table className="w-full min-w-[320px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
-                <th className="w-8 px-2 py-1.5">
-                  <span className="sr-only">Enabled</span>
-                </th>
-                <th className="px-2 py-1.5 text-right font-medium">Width ({u.label})</th>
-                <th className="px-2 py-1.5 text-left font-medium">Label</th>
-                <th className="w-10 px-1 py-1.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {press.webs.map((w, i) => (
-                <tr key={w.id} className={`border-b border-slate-100 last:border-0 ${w.enabled === false ? "opacity-45" : ""}`}>
-                  <td className="px-2 text-center">
-                    <CheckCell checked={w.enabled !== false} onChange={(v) => updateWeb(w.id, { enabled: v })} title="Consider this web width" />
-                  </td>
-                  <td className="border-l border-slate-100 p-0">
-                    <NumberCell value={w.width} onChange={(v) => updateWeb(w.id, { width: v })} placeholder="330" aria-label={`Web ${i + 1} width`} />
-                  </td>
-                  <td className="border-l border-slate-100 p-0">
-                    <TextCell value={w.label} onChange={(v) => updateWeb(w.id, { label: v })} placeholder="optional" aria-label={`Web ${i + 1} label`} />
-                  </td>
-                  <td className="px-1 text-right">
-                    <IconButton
-                      onClick={() => set({ webs: press.webs.length > 1 ? press.webs.filter((x) => x.id !== w.id) : press.webs })}
-                      title="Remove web width"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </IconButton>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3 p-3">
+          <div className="flex flex-wrap gap-4 text-sm">
+            {[
+              { id: "range", label: "Slit to any width in range" },
+              { id: "list", label: "Only widths I stock" },
+            ].map((m) => (
+              <label key={m.id} className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="webMode"
+                  checked={(press.webMode || "range") === m.id}
+                  onChange={() => set({ webMode: m.id })}
+                  className="h-4 w-4 cursor-pointer accent-orange-600"
+                />
+                {m.label}
+              </label>
+            ))}
+          </div>
+
+          {(press.webMode || "range") === "range" ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={`Minimum print width (${u.label})`} hint="Narrower jobs still run — and still cost — this width">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className={inputClass}
+                  value={press.minWidth}
+                  onChange={decimal(press.minWidth, (v) => set({ minWidth: v }))}
+                />
+              </Field>
+              <Field label={`Maximum print width (${u.label})`} hint="The widest the press can run">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className={inputClass}
+                  value={press.maxWidth}
+                  onChange={decimal(press.maxWidth, (v) => set({ maxWidth: v }))}
+                />
+              </Field>
+            </div>
+          ) : null}
         </div>
+
+        {(press.webMode || "range") === "list" && (
+          <div className="relative overflow-x-auto border-t border-slate-100">
+            <table className="w-full min-w-[320px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+                  <th className="w-8 px-2 py-1.5">
+                    <span className="sr-only">Enabled</span>
+                  </th>
+                  <th className="px-2 py-1.5 text-right font-medium">Width ({u.label})</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Label</th>
+                  <th className="w-10 px-1 py-1.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {press.webs.map((w, i) => (
+                  <tr key={w.id} className={`border-b border-slate-100 last:border-0 ${w.enabled === false ? "opacity-45" : ""}`}>
+                    <td className="px-2 text-center">
+                      <CheckCell checked={w.enabled !== false} onChange={(v) => updateWeb(w.id, { enabled: v })} title="Consider this web width" />
+                    </td>
+                    <td className="border-l border-slate-100 p-0">
+                      <NumberCell value={w.width} onChange={(v) => updateWeb(w.id, { width: v })} placeholder="330" aria-label={`Web ${i + 1} width`} />
+                    </td>
+                    <td className="border-l border-slate-100 p-0">
+                      <TextCell value={w.label} onChange={(v) => updateWeb(w.id, { label: v })} placeholder="optional" aria-label={`Web ${i + 1} label`} />
+                    </td>
+                    <td className="px-1 text-right">
+                      <IconButton
+                        onClick={() => set({ webs: press.webs.length > 1 ? press.webs.filter((x) => x.id !== w.id) : press.webs })}
+                        title="Remove web width"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </IconButton>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Panel>
 
-      <Panel title="Cylinder" subtitle={`Repeat = teeth × pitch`}>
+      <Panel title="Cylinder" subtitle="Repeat = teeth × pitch — on equal cost the smaller plate wins">
         <div className="space-y-3 p-3">
           <div className="flex gap-4 text-sm">
             {[

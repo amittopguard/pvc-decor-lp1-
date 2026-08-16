@@ -25,10 +25,10 @@ function load() {
   const source = `
     const layout = (function () {
       ${strip("layout.js")}
-      return { solveStepRepeat, aroundFit, acrossFit, cylinderTeeth, round, PITCHES, getPitch, DEFAULT_FLEXO };
+      return { solveStepRepeat, aroundFit, acrossFit, cylinderTeeth, widthOptions, round, PITCHES, getPitch, DEFAULT_FLEXO, DEFAULT_PLATE_TOLERANCE };
     })();
     const gang = (function () {
-      const { aroundFit, cylinderTeeth, round } = layout;
+      const { aroundFit, cylinderTeeth, round, DEFAULT_PLATE_TOLERANCE } = layout;
       ${strip("gang.js")}
       return { solveGang };
     })();
@@ -135,11 +135,20 @@ section("4. The ranking prefers cheaper material, not more labels per turn");
     gapAround: 3,
     pitch: 3.175,
   });
+  // Ranking is by cost bucket, so layouts that tie on material within the
+  // tolerance are ordered by the smaller cylinder rather than by raw cost.
   const sorted = r.options.every(
-    (o, i) => i === 0 || r.options[i - 1].materialPerLabel <= o.materialPerLabel + 1e-9
+    (o, i) =>
+      i === 0 ||
+      r.options[i - 1].costBucket < o.costBucket ||
+      (r.options[i - 1].costBucket === o.costBucket && r.options[i - 1].repeat <= o.repeat + 1e-9)
   );
-  check("options are ordered by material per label", sorted);
-  check("the best option is the cheapest per label", r.best === r.options[0]);
+  check("options are ordered by cost, then by the smaller plate", sorted);
+  check(
+    "the best option is within the tolerance of the cheapest per label",
+    r.best.materialPerLabel <= Math.min(...r.options.map((o) => o.materialPerLabel)) * 1.005 + 1e-9,
+    `${r.best.materialPerLabel}`
+  );
   const anyMorePerRev = r.options.some((o) => o.perRev > r.best.perRev);
   check(
     "a higher labels-per-rev option can still rank lower",
@@ -313,6 +322,167 @@ section("11. Gang run — guards and performance");
     "utilisation is a sane fraction",
     big.best.utilisation > 0 && big.best.utilisation <= 1,
     `${big.best.utilisation}`
+  );
+}
+
+section("12. Press width rule — slit anywhere between 320 and 650 mm");
+{
+  const r = solveStepRepeat({
+    label: { width: 100, height: 60, canRotate: true },
+    webRange: { min: 320, max: 650 },
+    cylinders: { teeth: [96, 104, 112, 120, 128, 136] },
+    gapAcross: 3,
+    gapAround: 3,
+    edgeMargin: 5,
+    pitch: 3.175,
+    quantity: 100000,
+  });
+  check("solves against a width range", r.ok === true, (r.errors || []).join(", "));
+  check(
+    "every option stays inside the press width limits",
+    r.options.every((o) => o.webWidth >= 320 - 1e-9 && o.webWidth <= 650 + 1e-9),
+    r.options.map((o) => o.webWidth).join(", ")
+  );
+
+  const b = r.best;
+  const block = b.across * b.labelWidth + (b.across - 1) * b.gapAcross;
+  check(
+    "the recommended width is the lanes plus gutters and margins",
+    Math.abs(b.webWidth - Math.max(320, block + 10)) < 1e-6,
+    `${b.webWidth} vs block ${block}`
+  );
+  check("the width beats the old fixed 330 web", b.webWidth > 330, `${b.webWidth}`);
+
+  const fixed330 = solveStepRepeat({
+    label: { width: 100, height: 60, canRotate: true },
+    webs: [{ width: 330 }],
+    cylinders: { teeth: [96, 104, 112, 120, 128, 136] },
+    gapAcross: 3,
+    gapAround: 3,
+    edgeMargin: 5,
+    pitch: 3.175,
+  });
+  check(
+    "choosing the width costs less material per label than a fixed 330 web",
+    b.materialPerLabel < fixed330.best.materialPerLabel,
+    `${b.materialPerLabel.toFixed(0)} vs ${fixed330.best.materialPerLabel.toFixed(0)}`
+  );
+}
+
+section("13. A narrow label still pays for the minimum print width");
+{
+  const r = solveStepRepeat({
+    label: { width: 40, height: 30, canRotate: false },
+    webRange: { min: 320, max: 650 },
+    cylinders: { teeth: [100] },
+    gapAcross: 3,
+    gapAround: 3,
+    edgeMargin: 5,
+    pitch: 3.175,
+  });
+  const single = r.options.find((o) => o.across === 1);
+  check("a single lane is still offered", !!single);
+  check("but it is charged at the 320 mm minimum", single.webWidth === 320, `${single.webWidth}`);
+  check("and the unused width shows up as trim", single.edgeWaste > 270, `${single.edgeWaste}`);
+  check(
+    "the winner fills the web rather than running one lane",
+    r.best.across > 1 && r.best.materialPerLabel < single.materialPerLabel,
+    `${r.best.across} lanes`
+  );
+}
+
+section("14. Repeat rule — equal cost is broken by the smaller cylinder");
+{
+  // 60 mm label with a 3 mm gap divides 100T, 200T and 300T equally well, so
+  // all three cost the same material and the smallest plate should win.
+  const r = solveStepRepeat({
+    label: { width: 100, height: 60, canRotate: false },
+    webs: [{ width: 330 }],
+    cylinders: { teeth: [100, 200, 300] },
+    gapAcross: 3,
+    gapAround: 3,
+    edgeMargin: 0,
+    pitch: 3.175,
+  });
+  const cost = (t) => r.options.find((o) => o.teeth === t).materialPerLabel;
+  check("the three cylinders cost the same per label", Math.abs(cost(100) - cost(300)) / cost(100) < 0.005);
+  check("the smallest cylinder is chosen", r.best.teeth === 100, `chose ${r.best.teeth}T`);
+  check(
+    "options are ordered by cost bucket, then repeat",
+    r.options.every(
+      (o, i) =>
+        i === 0 ||
+        r.options[i - 1].costBucket < o.costBucket ||
+        (r.options[i - 1].costBucket === o.costBucket && r.options[i - 1].repeat <= o.repeat + 1e-9)
+    )
+  );
+
+  // A genuinely cheaper layout must still outrank a smaller cylinder.
+  const wide = solveStepRepeat({
+    label: { width: 100, height: 60, canRotate: false },
+    webs: [{ width: 330 }],
+    cylinders: { teeth: [61, 139] },
+    gapAcross: 3,
+    gapAround: 3,
+    edgeMargin: 0,
+    pitch: 3.175,
+  });
+  check(
+    "a materially cheaper layout still beats the smaller plate",
+    wide.best.materialPerLabel <= wide.options[wide.options.length - 1].materialPerLabel + 1e-9
+  );
+}
+
+section("15. Gang run against the width range");
+{
+  const r = solveGang({
+    skus: [
+      { id: "a", name: "A", width: 100, height: 60, qty: 90000 },
+      { id: "b", name: "B", width: 100, height: 60, qty: 30000 },
+      { id: "c", name: "C", width: 60, height: 40, qty: 45000 },
+    ],
+    webRange: { min: 320, max: 650 },
+    cylinders: { teeth: [96, 104, 112, 120, 128, 136] },
+    gapAcross: 3,
+    gapAround: 3,
+    edgeMargin: 5,
+    pitch: 3.175,
+  });
+  check("solves", r.ok === true, (r.errors || []).join(", "));
+  check(
+    "the plan stays inside the press width limits",
+    r.options.every((o) => o.webWidth >= 320 - 1e-9 && o.webWidth <= 650 + 1e-9),
+    r.options.map((o) => o.webWidth).join(", ")
+  );
+  check(
+    "the recommended width matches the lanes it carries",
+    Math.abs(r.best.webWidth - Math.max(320, r.best.usedWidth + 10)) < 1e-6,
+    `${r.best.webWidth} vs used ${r.best.usedWidth}`
+  );
+  check("every SKU meets its order", r.best.lanes.every((l) => l.printed >= l.ordered));
+  check(
+    "material equals turns × web × repeat",
+    Math.abs(r.best.materialArea - r.best.revolutions * r.best.webWidth * r.best.repeat) < 1,
+    `${r.best.materialArea}`
+  );
+
+  const fixed = solveGang({
+    skus: [
+      { id: "a", name: "A", width: 100, height: 60, qty: 90000 },
+      { id: "b", name: "B", width: 100, height: 60, qty: 30000 },
+      { id: "c", name: "C", width: 60, height: 40, qty: 45000 },
+    ],
+    webs: [{ width: 330 }],
+    cylinders: { teeth: [96, 104, 112, 120, 128, 136] },
+    gapAcross: 3,
+    gapAround: 3,
+    edgeMargin: 5,
+    pitch: 3.175,
+  });
+  check(
+    "choosing the width uses no more material than a fixed 330 web",
+    r.best.materialArea <= fixed.best.materialArea + 1e-6,
+    `${r.best.materialArea.toFixed(0)} vs ${fixed.best.materialArea.toFixed(0)}`
   );
 }
 

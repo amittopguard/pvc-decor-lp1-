@@ -31,7 +31,16 @@ export const DEFAULT_FLEXO = {
   gapAround: 3,
   edgeMargin: 5,
   distributeAcross: false,
+  minWidth: 320,
+  maxWidth: 650,
+  plateTolerance: 0.005,
 };
+
+/**
+ * Layouts whose material cost is within this fraction of each other count as
+ * equal, and the smaller cylinder wins — a smaller plate is the cheaper plate.
+ */
+export const DEFAULT_PLATE_TOLERANCE = 0.005;
 
 const num = (v) => {
   const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."));
@@ -84,14 +93,68 @@ export function acrossFit(usableWidth, labelWidth, minGap, distribute) {
 }
 
 /**
+ * Lane counts that can be run when the web may be slit to any width between
+ * `min` and `max`. The web width becomes an output: slit to exactly what the
+ * lanes need, except that anything under the minimum print width still costs
+ * the minimum print width.
+ */
+export function widthOptions(minWidth, maxWidth, labelWidth, gutter, margin, distribute) {
+  const out = [];
+  if (labelWidth <= 0 || maxWidth <= 0) return out;
+  const maxUsable = maxWidth - 2 * margin;
+  const maxLanes = Math.floor((maxUsable + gutter + EPS) / (labelWidth + gutter));
+
+  for (let count = 1; count <= maxLanes; count++) {
+    const block = count * labelWidth + (count - 1) * gutter;
+    const required = block + 2 * margin;
+    // Narrower than the press can print still runs — and still gets paid for.
+    const webWidth = Math.max(minWidth, required);
+    if (webWidth > maxWidth + EPS) continue;
+
+    let gap = gutter;
+    if (distribute && count > 1) gap = (webWidth - 2 * margin - count * labelWidth) / (count - 1);
+
+    out.push({
+      count,
+      webWidth,
+      gap,
+      leftover: webWidth - block - 2 * margin,
+      belowMinimum: required < minWidth - EPS,
+    });
+  }
+  return out;
+}
+
+/**
+ * Rank layouts. Material cost leads; layouts that tie on cost within
+ * `plateTolerance` are then ordered by the smaller cylinder, since the smaller
+ * plate is cheaper to make. The bucket keeps the comparison transitive.
+ */
+function rankOptions(options, plateTolerance) {
+  const tol = plateTolerance > 0 ? plateTolerance : DEFAULT_PLATE_TOLERANCE;
+  const base = Math.log1p(tol);
+  options.forEach((o) => {
+    o.costBucket = Math.round(Math.log(o.materialPerLabel) / base);
+  });
+  options.sort(
+    (a, b) =>
+      a.costBucket - b.costBucket ||
+      a.repeat - b.repeat ||
+      b.perRev - a.perRev ||
+      a.webWidth - b.webWidth
+  );
+}
+
+/**
  * Every viable web × cylinder × orientation combination, best first.
  *
- * `webs` are candidate web widths — pass one to fix the web, or several to let
- * the search pick the cheapest slit width.
+ * Pass `webRange: { min, max }` to let the search choose the slit width, or
+ * `webs` to restrict it to widths already in stock.
  */
 export function solveStepRepeat({
   label = {},
   webs = [],
+  webRange = null,
   cylinders = {},
   gapAcross = 3,
   gapAround = 3,
@@ -99,6 +162,7 @@ export function solveStepRepeat({
   distributeAcross = false,
   pitch = 3.175,
   quantity = 0,
+  plateTolerance = DEFAULT_PLATE_TOLERANCE,
   limit = 40,
 } = {}) {
   const labelW = num(label.width);
@@ -107,10 +171,16 @@ export function solveStepRepeat({
 
   const errors = [];
   if (labelW <= 0 || labelH <= 0) errors.push("Enter a label width and height.");
+
+  const useRange = !!webRange && num(webRange.max) > 0;
+  const minWidth = useRange ? Math.max(0, num(webRange.min)) : 0;
+  const maxWidth = useRange ? num(webRange.max) : 0;
+  if (useRange && minWidth > maxWidth) errors.push("The minimum print width is wider than the maximum.");
+
   const webList = webs
     .filter((w) => w && w.enabled !== false && num(w.width) > 0)
     .map((w) => ({ width: num(w.width), label: w.label || `${round(num(w.width))}` }));
-  if (!webList.length) errors.push("Enter at least one web width.");
+  if (!useRange && !webList.length) errors.push("Enter at least one web width.");
   const teethList = cylinderTeeth(cylinders);
   if (!teethList.length) errors.push("Enter a cylinder range or a list of teeth counts.");
   if (errors.length) return { ok: false, errors, options: [], best: null };
@@ -127,21 +197,40 @@ export function solveStepRepeat({
   }
 
   const options = [];
-  for (const web of webList) {
-    const usable = web.width - 2 * margin;
-    if (usable <= EPS) continue;
+  for (const o of orientations) {
+    // In range mode the lane count drives the width; in list mode the width
+    // drives the lane count.
+    const widths = useRange
+      ? widthOptions(minWidth, maxWidth, o.w, minGapAcross, margin, distributeAcross).map((x) => ({
+          ...x,
+          label: `${round(x.webWidth)}`,
+        }))
+      : webList
+          .map((w) => {
+            const usable = w.width - 2 * margin;
+            if (usable <= EPS) return null;
+            const across = acrossFit(usable, o.w, minGapAcross, distributeAcross);
+            if (!across) return null;
+            return {
+              count: across.count,
+              webWidth: w.width,
+              gap: across.gap,
+              leftover: across.leftover,
+              label: w.label,
+              belowMinimum: false,
+            };
+          })
+          .filter(Boolean);
 
-    for (const teeth of teethList) {
-      const repeat = teeth * toothPitch;
-
-      for (const o of orientations) {
+    for (const width of widths) {
+      for (const teeth of teethList) {
+        const repeat = teeth * toothPitch;
         const around = aroundFit(repeat, o.h, minGapAround);
-        const across = acrossFit(usable, o.w, minGapAcross, distributeAcross);
-        if (!around || !across) continue;
+        if (!around) continue;
 
-        const perRev = across.count * around.count;
+        const perRev = width.count * around.count;
         const labelArea = o.w * o.h;
-        const revArea = web.width * repeat;
+        const revArea = width.webWidth * repeat;
         const utilisation = (perRev * labelArea) / revArea;
         const materialPerLabel = revArea / perRev;
 
@@ -149,20 +238,21 @@ export function solveStepRepeat({
         const webLength = revolutions * repeat;
 
         options.push({
-          id: `${web.label}|${teeth}|${o.rotated ? "r" : "n"}`,
-          webWidth: round(web.width),
-          webLabel: web.label,
+          id: `${width.label}|${teeth}|${o.rotated ? "r" : "n"}`,
+          webWidth: round(width.webWidth),
+          webLabel: width.label,
+          belowMinimum: !!width.belowMinimum,
           teeth,
           repeat: round(repeat, 4),
           rotated: o.rotated,
           labelWidth: round(o.w),
           labelHeight: round(o.h),
-          across: across.count,
+          across: width.count,
           around: around.count,
           perRev,
-          gapAcross: round(across.gap, 4),
+          gapAcross: round(width.gap, 4),
           gapAround: round(around.gap, 4),
-          edgeWaste: round(across.leftover + 2 * margin, 4),
+          edgeWaste: round(width.leftover + 2 * margin, 4),
           utilisation,
           materialPerLabel,
           revolutions,
@@ -183,15 +273,7 @@ export function solveStepRepeat({
     };
   }
 
-  // Cheapest material per label wins; then more labels per turn (faster run),
-  // then the smaller cylinder, which is usually the cheaper plate.
-  options.sort(
-    (a, b) =>
-      a.materialPerLabel - b.materialPerLabel ||
-      b.perRev - a.perRev ||
-      a.teeth - b.teeth ||
-      a.webWidth - b.webWidth
-  );
+  rankOptions(options, plateTolerance);
 
   return { ok: true, errors: [], options: options.slice(0, limit), best: options[0], evaluated: options.length };
 }

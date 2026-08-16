@@ -26,8 +26,10 @@ export default function WebDiagram({
   const stroke = span / 600;
   const ghost = showGhost ? repeat * 0.16 : 0;
 
-  const viewBox = `${-gutter} ${-ghost - gutter * 0.5} ${webWidth + gutter * 1.4} ${
-    repeat + ghost * 2 + gutter
+  // The width caption sits above the ghost row, so the box needs a full gutter
+  // of headroom or the text is clipped.
+  const viewBox = `${-gutter} ${-ghost - gutter} ${webWidth + gutter * 1.6} ${
+    repeat + ghost * 2 + gutter * 1.6
   }`;
 
   const label = (r, dy) => {

@@ -7,7 +7,7 @@
  * quantities is what keeps that overrun — and the material bill — down.
  */
 
-import { aroundFit, cylinderTeeth, round } from "./layout";
+import { aroundFit, cylinderTeeth, round, DEFAULT_PLATE_TOLERANCE } from "./layout";
 
 const EPS = 1e-6;
 
@@ -21,7 +21,8 @@ const num = (v) => {
  * Depth-first over lane counts, pruned on width; the remaining SKUs always
  * need at least one lane each, which cuts the tree hard.
  */
-function bestLanes(items, usable, gap, deadline) {
+function bestLanes(items, ctx, deadline) {
+  const { maxUsable, minWidth, maxWidth, gap, margin, repeat } = ctx;
   const n = items.length;
   const lanes = new Array(n).fill(1);
   let best = null;
@@ -40,17 +41,27 @@ function bestLanes(items, usable, gap, deadline) {
     }
     let overrun = 0;
     let totalLanes = 0;
+    let block = 0;
     for (let i = 0; i < n; i++) {
       overrun += revolutions * lanes[i] * items[i].around - items[i].qty;
       totalLanes += lanes[i];
+      block += lanes[i] * items[i].w;
     }
+    block += (totalLanes - 1) * gap;
+
+    // The web is slit to what the lanes need, but never below the minimum
+    // printable width — anything narrower still costs the minimum.
+    const webWidth = Math.max(minWidth, block + 2 * margin);
+    if (webWidth > maxWidth + EPS) return;
+    const material = revolutions * webWidth * repeat;
+
     if (
       !best ||
-      revolutions < best.revolutions ||
-      (revolutions === best.revolutions && overrun < best.overrun) ||
-      (revolutions === best.revolutions && overrun === best.overrun && totalLanes < best.totalLanes)
+      material < best.material - 1e-6 ||
+      (Math.abs(material - best.material) <= 1e-6 && overrun < best.overrun) ||
+      (Math.abs(material - best.material) <= 1e-6 && overrun === best.overrun && totalLanes < best.totalLanes)
     ) {
-      best = { lanes: [...lanes], revolutions, overrun, totalLanes };
+      best = { lanes: [...lanes], revolutions, overrun, totalLanes, webWidth, block, material };
     }
   };
 
@@ -64,7 +75,7 @@ function bestLanes(items, usable, gap, deadline) {
       lanes[i] = k;
       const width = usedWidth + k * (items[i].w + gap);
       // Everything after this SKU still needs one lane apiece.
-      if (width + tailMin[i + 1] - gap > usable + EPS) break;
+      if (width + tailMin[i + 1] - gap > maxUsable + EPS) break;
       walk(i + 1, width);
       if (leaves > 400000 || Date.now() > deadline) break;
     }
@@ -82,11 +93,13 @@ function bestLanes(items, usable, gap, deadline) {
 export function solveGang({
   skus = [],
   webs = [],
+  webRange = null,
   cylinders = {},
   gapAcross = 3,
   gapAround = 3,
   edgeMargin = 0,
   pitch = 3.175,
+  plateTolerance = DEFAULT_PLATE_TOLERANCE,
   timeBudgetMs = 4000,
   limit = 20,
 } = {}) {
@@ -107,10 +120,14 @@ export function solveGang({
   const errors = [];
   if (list.length < 2) errors.push("Add at least two SKUs to plan a gang run.");
   if (list.length > 8) errors.push("Gang planning is limited to 8 SKUs at a time.");
+  const useRange = !!webRange && num(webRange.max) > 0;
+  const rangeMin = useRange ? Math.max(0, num(webRange.min)) : 0;
+  const rangeMax = useRange ? num(webRange.max) : 0;
+  if (useRange && rangeMin > rangeMax) errors.push("The minimum print width is wider than the maximum.");
   const webList = webs
     .filter((w) => w && w.enabled !== false && num(w.width) > 0)
     .map((w) => ({ width: num(w.width), label: w.label || `${round(num(w.width))}` }));
-  if (!webList.length) errors.push("Enter at least one web width.");
+  if (!useRange && !webList.length) errors.push("Enter at least one web width.");
   const teethList = cylinderTeeth(cylinders);
   if (!teethList.length) errors.push("Enter a cylinder range or a list of teeth counts.");
   if (errors.length) return { ok: false, errors, options: [], best: null };
@@ -135,7 +152,11 @@ export function solveGang({
   const options = [];
   let combos = 0;
 
-  outer: for (const web of webList) {
+  const webCandidates = useRange
+    ? [{ width: rangeMax, label: "slit to fit", range: true }]
+    : webList.map((w) => ({ ...w, range: false }));
+
+  outer: for (const web of webCandidates) {
     const usable = web.width - 2 * margin;
     if (usable <= EPS) continue;
 
@@ -161,19 +182,31 @@ export function solveGang({
         }
         if (!viable) continue;
 
-        const result = bestLanes(items, usable, gap, deadline);
+        const result = bestLanes(
+          items,
+          {
+            maxUsable: usable,
+            minWidth: web.range ? rangeMin : web.width,
+            maxWidth: web.range ? rangeMax : web.width,
+            gap,
+            margin,
+            repeat,
+          },
+          deadline
+        );
         if (!result) continue;
 
-        const usedWidth =
-          items.reduce((s, it, i) => s + result.lanes[i] * it.w, 0) + (result.totalLanes - 1) * gap;
-        const revArea = web.width * repeat;
-        const materialArea = result.revolutions * revArea;
+        const webWidth = result.webWidth;
+        const usedWidth = result.block;
+        const revArea = webWidth * repeat;
+        const materialArea = result.material;
         const labelArea = items.reduce((s, it, i) => s + result.lanes[i] * it.around * it.w * it.h, 0);
 
         options.push({
           id: `${web.label}|${teeth}|${flips.map((f) => (f ? "r" : "n")).join("")}`,
-          webWidth: round(web.width),
-          webLabel: web.label,
+          webWidth: round(webWidth),
+          webLabel: web.range ? `${round(webWidth)}` : web.label,
+          belowMinimum: web.range && usedWidth + 2 * margin < rangeMin - EPS,
           teeth,
           repeat: round(repeat, 4),
           revolutions: result.revolutions,
@@ -182,7 +215,7 @@ export function solveGang({
           totalOverrun: result.overrun,
           totalLanes: result.totalLanes,
           usedWidth: round(usedWidth, 3),
-          edgeWaste: round(web.width - usedWidth, 3),
+          edgeWaste: round(webWidth - usedWidth, 3),
           utilisation: labelArea / revArea,
           lanes: items.map((it, i) => {
             const perRev = result.lanes[i] * it.around;
@@ -217,13 +250,19 @@ export function solveGang({
     };
   }
 
-  // Least material first, then least overrun, then the simpler plate set.
+  // Least material first; plans that tie within the tolerance are then ordered
+  // by the smaller cylinder, because the smaller plate is the cheaper plate.
+  const tol = plateTolerance > 0 ? plateTolerance : DEFAULT_PLATE_TOLERANCE;
+  const base = Math.log1p(tol);
+  options.forEach((o) => {
+    o.costBucket = Math.round(Math.log(o.materialArea) / base);
+  });
   options.sort(
     (a, b) =>
-      a.materialArea - b.materialArea ||
+      a.costBucket - b.costBucket ||
+      a.repeat - b.repeat ||
       a.totalOverrun - b.totalOverrun ||
-      a.totalLanes - b.totalLanes ||
-      a.teeth - b.teeth
+      a.totalLanes - b.totalLanes
   );
 
   return {

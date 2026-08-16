@@ -79,7 +79,12 @@ export default function GangResults({ result, unit, margin, gapAcross, selected,
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
         <Stat label="Lanes" value={option.totalLanes} sub={`${option.lanes.length} SKUs on the web`} />
         <Stat label="Cylinder" value={`${option.teeth}T`} sub={`${formatLength(option.repeat, unit)} ${u.label} repeat`} />
-        <Stat label="Web" value={formatLength(option.webWidth, unit)} sub={`${formatLength(option.edgeWaste, unit)} ${u.label} trim`} />
+        <Stat
+          label="Slit to"
+          value={`${formatLength(option.webWidth, unit)} ${u.label}`}
+          tone={option.belowMinimum ? "warn" : "default"}
+          sub={option.belowMinimum ? "minimum print width" : `${formatLength(option.edgeWaste, unit)} ${u.label} trim`}
+        />
         <Stat
           label="Material used"
           value={formatPercent(option.utilisation)}
