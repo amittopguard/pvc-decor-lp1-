@@ -24,14 +24,14 @@ export const DEFAULT_RATES = {
     ratePerKg: 220,
     ratePerSqm: 0,
     micron: 50,
-    density: 1.35, // PVC ~1.35, BOPP ~0.91, PET ~1.4
+    density: 1.4, // PVC 1.4, BOPP ~0.91, PET ~1.4
   },
   currency: "₹",
 };
 
 /** Common film densities, g/cm3. */
 export const FILM_DENSITY = {
-  PVC: 1.35,
+  PVC: 1.4,
   BOPP: 0.91,
   PET: 1.4,
   PE: 0.92,

@@ -41,20 +41,20 @@ const near = (a, b, tol = 1e-6) => Math.abs(a - b) < tol;
 section("1. Film weight — the bridge between per-kg and per-m2");
 {
   // A square metre one micron thick is one cubic centimetre, so gsm = micron x density.
-  check("50 micron PVC at 1.35 is 67.5 gsm", near(C.gsm(50, 1.35), 67.5), `${C.gsm(50, 1.35)}`);
+  check("50 micron PVC at 1.4 is 70 gsm", near(C.gsm(50, 1.4), 70), `${C.gsm(50, 1.4)}`);
   check("20 micron BOPP at 0.91 is 18.2 gsm", near(C.gsm(20, 0.91), 18.2, 1e-9), `${C.gsm(20, 0.91)}`);
-  check("one kilo of 50 micron PVC gives 14.81 m2", near(C.sqmPerKg(50, 1.35), 1000 / 67.5, 1e-9), `${C.sqmPerKg(50, 1.35)}`);
-  check("missing thickness yields zero, not infinity", C.sqmPerKg(0, 1.35) === 0);
+  check("one kilo of 50 micron PVC gives 14.29 m2", near(C.sqmPerKg(50, 1.4), 1000 / 70, 1e-9), `${C.sqmPerKg(50, 1.4)}`);
+  check("missing thickness yields zero, not infinity", C.sqmPerKg(0, 1.4) === 0);
 }
 
 section("2. A per-kg rate and a per-m2 rate meet in the middle");
 {
-  const perKg = { mode: "per_kg", ratePerKg: 220, micron: 50, density: 1.35 };
+  const perKg = { mode: "per_kg", ratePerKg: 220, micron: 50, density: 1.4 };
   const costSqm = C.filmCostPerSqm(perKg);
-  // 220 per kg over 14.81 m2 per kg is 14.85 per m2.
-  check("220/kg on 67.5 gsm is 14.85 per m2", near(costSqm, 220 * 0.0675, 1e-9), `${costSqm}`);
+  // 220 per kg over 14.29 m2 per kg is 15.40 per m2.
+  check("220/kg on 70 gsm is 15.40 per m2", near(costSqm, 220 * 0.07, 1e-9), `${costSqm}`);
 
-  const perSqm = { mode: "per_sqm", ratePerSqm: costSqm, micron: 50, density: 1.35 };
+  const perSqm = { mode: "per_sqm", ratePerSqm: costSqm, micron: 50, density: 1.4 };
   check(
     "quoting that per m2 rate back per kg returns the original",
     near(C.filmCostPerKg(perSqm), 220, 1e-9),
@@ -102,7 +102,7 @@ section("5. Whole job cost, and cost per thousand labels");
     ...C.DEFAULT_RATES,
     plateRatePerCm2: 1.3,
     mountingPerPlate: 0,
-    film: { mode: "per_kg", ratePerKg: 220, micron: 50, density: 1.35 },
+    film: { mode: "per_kg", ratePerKg: 220, micron: 50, density: 1.4 },
   };
   // 100,000 labels, 2117 m of 625 mm web = 1323 m2 of film.
   const materialArea = 2117000 * 625; // mm2
@@ -130,7 +130,7 @@ section("5. Whole job cost, and cost per thousand labels");
 
 section("6. Break-even between two layouts");
 {
-  const rates = { ...C.DEFAULT_RATES, film: { mode: "per_kg", ratePerKg: 220, micron: 50, density: 1.35 } };
+  const rates = { ...C.DEFAULT_RATES, film: { mode: "per_kg", ratePerKg: 220, micron: 50, density: 1.4 } };
   const base = { unit: "mm", plateAreaCm2: 2000, colours: 4, quantity: 100000, rates };
 
   // A: one plate set, wastes more film. B: two sets, tighter layout.
@@ -165,7 +165,8 @@ section("7. Defaults match the quoted rates");
     C.DEFAULT_RATES.plateRatePerCm2 >= 1.2 && C.DEFAULT_RATES.plateRatePerCm2 <= 1.4);
   check("mounting tape is not charged separately", C.DEFAULT_RATES.mountingPerPlate === 0);
   check("film defaults to per kilo, the common case", C.DEFAULT_RATES.film.mode === "per_kg");
-  check("PVC density is on file", near(C.FILM_DENSITY.PVC, 1.35));
+  check("PVC density is on file at 1.4", near(C.FILM_DENSITY.PVC, 1.4));
+  check("and the default film uses it", near(C.DEFAULT_RATES.film.density, 1.4));
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
