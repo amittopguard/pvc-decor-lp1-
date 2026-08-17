@@ -42,7 +42,7 @@ export function gangRects(plan, margin, gapAcross, colorOf) {
   return rects;
 }
 
-function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragging, setDragging }) {
+function PlateCard({ plate, total, plateCount, unit, margin, gapAcross, colorOf, move, dragging, setDragging }) {
   const [showOptions, setShowOptions] = useState(false);
   const [dropping, setDropping] = useState(false);
   const plan = plate.plan;
@@ -98,6 +98,7 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragg
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <th className="px-2 py-1.5 text-left font-medium">SKU</th>
+              {move && <th className="px-2 py-1.5 text-left font-medium print:hidden">Move</th>}
               <th className="px-2 py-1.5 text-right font-medium">Lanes</th>
               <th className="px-2 py-1.5 text-right font-medium">Around</th>
               <th className="px-2 py-1.5 text-right font-medium">Per turn</th>
@@ -141,6 +142,33 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragg
                     </button>
                   )}
                 </td>
+                {move && (
+                  <td className="px-2 py-1 print:hidden">
+                    <select
+                      value=""
+                      aria-label={`Move ${l.name} to another plate`}
+                      title="Move this SKU"
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (!v) return;
+                        move(l.id, v === "new" ? "new" : v === "off" ? null : Number(v));
+                        e.target.value = "";
+                      }}
+                      className="border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-1 py-0.5 text-[11px] text-slate-600 dark:text-slate-400 outline-none focus:border-orange-500"
+                    >
+                      <option value="">move…</option>
+                      {Array.from({ length: plateCount }, (_, i) => i + 1)
+                        .filter((n) => n !== plate.index)
+                        .map((n) => (
+                          <option key={n} value={n}>
+                            to plate {n}
+                          </option>
+                        ))}
+                      <option value="new">to a new plate</option>
+                      <option value="off">off the run</option>
+                    </select>
+                  </td>
+                )}
                 <td className="px-2 py-1 text-right tabular-nums">{l.lanes}</td>
                 <td className="px-2 py-1 text-right tabular-nums">{l.around}</td>
                 <td className="px-2 py-1 text-right tabular-nums">{l.perRev}</td>
@@ -323,8 +351,9 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
 
       {onMove && (
         <p className="px-1 text-xs text-slate-500 dark:text-slate-400 print:hidden">
-          Drag a SKU onto another plate to move it, or × to take it off the run. The plate it lands on is worked
-          out again from scratch — the grouping is yours, the layout is still solved.
+          Use the <strong>move</strong> box on any row to send a SKU to another plate, to one of its own, or off
+          the run — or drag the row onto another plate if you prefer. Either way the plates are worked out again
+          from scratch: the grouping is yours, the layout is still solved.
         </p>
       )}
 
@@ -333,6 +362,7 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
           key={plate.index}
           plate={plate}
           total={result.plates.length}
+          plateCount={result.plates.length}
           unit={unit}
           margin={margin}
           gapAcross={gapAcross}

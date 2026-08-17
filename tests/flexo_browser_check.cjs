@@ -205,6 +205,66 @@ const check = (name, ok, detail) => {
   );
   await page.screenshot({ path: path.join(SHOTS, "flexo-plates-split.png"), fullPage: true });
 
+  console.log("\nMoving a SKU from one plate to another");
+  const laneNames = () =>
+    page.$$eval("article", (arts) =>
+      arts.map((a) => [...a.querySelectorAll("tbody tr td:first-child")].map((td) => td.innerText.trim().split("\n")[0]))
+    );
+  const lanesBefore = await laneNames();
+  check("there are at least two plates to move between", lanesBefore.length >= 2, `${lanesBefore.length} plates`);
+
+  // The move box: the way that works by touch, and the way a test can drive.
+  const firstName = lanesBefore[0][0];
+  await page.locator("article").first().locator("tbody tr").first()
+    .locator("select[aria-label^='Move ']").selectOption("2");
+  await page.waitForTimeout(1500);
+  await hideToasts();
+  let lanesAfter = await laneNames();
+  check(
+    `${firstName} left the plate it was on`,
+    !lanesAfter[0].includes(firstName),
+    `plate 1 still has: ${lanesAfter[0].join(", ")}`
+  );
+  check("and landed on plate 2", lanesAfter[1].includes(firstName), `plate 2 has: ${lanesAfter[1].join(", ")}`);
+  const movedText = await page.locator("main").innerText();
+  check("the results say the grouping is now the operator's", /moved these SKUs yourself/i.test(movedText),
+    movedText.slice(0, 200));
+
+  // And the drag path itself — the handlers, driven as a browser drives them.
+  const dragResult = await page.evaluate(() => {
+    const rows = document.querySelectorAll("article tbody tr");
+    const src = rows[0];
+    const name = src.querySelector("td").innerText.trim().split("\n")[0];
+    const target = document.querySelectorAll("article")[1];
+    const dt = new DataTransfer();
+    const fire = (el, type) => {
+      const e = new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt });
+      el.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    fire(src, "dragstart");
+    const overTakes = fire(target, "dragover");
+    const dropTakes = fire(target, "drop");
+    return { name, carried: dt.getData("text/plain"), overTakes, dropTakes };
+  });
+  check("dragging a row carries the SKU with it", !!dragResult.carried, JSON.stringify(dragResult));
+  check("a plate accepts the drop", dragResult.overTakes && dragResult.dropTakes, JSON.stringify(dragResult));
+  await page.waitForTimeout(1500);
+  await hideToasts();
+  lanesAfter = await laneNames();
+  check(
+    `${dragResult.name} moved by drag as well`,
+    !lanesAfter[0].includes(dragResult.name),
+    `plate 1 has: ${lanesAfter[0].join(", ")}`
+  );
+
+  // Back to the planner, so the report below is the planner's own split.
+  await tap("button:has-text(\"Back to the planner's split\")");
+  await page.waitForTimeout(400);
+  await tap("button:has-text('Calculate')");
+  await page.waitForSelector("text=Plate 1 of", { timeout: 40000 });
+  await hideToasts();
+
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 20000 }),
     tap("button:has-text('Export PDF')"),
