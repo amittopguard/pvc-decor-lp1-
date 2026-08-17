@@ -142,6 +142,7 @@ export default function OrderBoard({
   onStatus,
   onDelete,
   onMakePlate,
+  onMakeAllPlates,
   onDeleteLayout,
 }) {
   const [draft, setDraft] = useState(null);
@@ -420,11 +421,13 @@ export default function OrderBoard({
                       {l.per_thousand_minor ? formatMoney(l.per_thousand_minor) : "—"}
                     </td>
                     <td className="px-2 py-1.5">
-                      {l.plate_number || <span className="text-slate-400">not made yet</span>}
+                      {l.plate_count > 1
+                        ? `${l.plate_count} plates`
+                        : l.plate_number || <span className="text-slate-400">not made yet</span>}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center justify-end gap-1">
-                        {!l.plate_id && l.repeat_mm && (
+                        {!l.plate_count && l.repeat_mm && (
                           <ToolButton
                             disabled={busy}
                             onClick={async () => {
@@ -437,6 +440,21 @@ export default function OrderBoard({
                             }}
                           >
                             Make the plate
+                          </ToolButton>
+                        )}
+                        {!l.plate_count && !l.repeat_mm && (l.payload?.plates?.length || 0) > 1 && (
+                          <ToolButton
+                            disabled={busy}
+                            onClick={async () => {
+                              setError(null);
+                              try {
+                                await onMakeAllPlates(l.id);
+                              } catch (e) {
+                                setError(errorText(e, "Could not make the plates"));
+                              }
+                            }}
+                          >
+                            Make all {l.payload.plates.length} plates
                           </ToolButton>
                         )}
                         <IconButton

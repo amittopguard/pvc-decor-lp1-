@@ -311,6 +311,9 @@ ADDED_COLUMNS = {
         "charged_minor": "INT",
         "refund_after_qty": "INT",
         "refunded_minor": "INT",
+        # Which saved calculation this plate came out of. A gang run makes
+        # several plates from one layout, so the link lives on the plate.
+        "layout_id": "VARCHAR(64)",
     },
 }
 
@@ -1112,7 +1115,8 @@ def build(database, require_admin, upload_dir: Path):
 
     LAYOUT_SELECT = """
         SELECT l.*, o.order_number, c.name AS customer_name, p.plate_number,
-               a.code AS artwork_code, d.kld_number
+               a.code AS artwork_code, d.kld_number,
+               (SELECT COUNT(*) FROM vault_plates mp WHERE mp.layout_id = l.id) AS plate_count
         FROM vault_layouts l
         LEFT JOIN vault_orders o ON o.id = l.order_id
         LEFT JOIN vault_customers c ON c.id = o.customer_id
@@ -1171,56 +1175,32 @@ def build(database, require_admin, upload_dir: Path):
         await database.execute(f"INSERT INTO vault_layouts ({cols}) VALUES ({vals})", row)
         return await get_layout(row["id"], True)
 
-    @router.post("/layouts/{layout_id}/plate")
-    async def plate_from_layout(
-        layout_id: str, body: Optional[PlateFromLayout] = None, _: bool = Depends(require_admin)
-    ):
+    async def _plate_row(row, order, given, *, number, repeat_mm, web_width, cost_minor, lines):
         """
-        Turn a saved layout into a plate record.
-
-        Everything the plate needs is already in the layout — the repeat, the web
-        width, the colours and what it works out at — and everything else comes
-        from the order it was saved against, so nothing is retyped.
+        One plate record from a layout. The geometry and the money come from the
+        calculation, and everything else -- the KLD, the customer, the artwork
+        that gives the plate its name -- comes from the order it was saved
+        against, so nothing is retyped.
         """
-        row = await database.fetch_one("SELECT * FROM vault_layouts WHERE id = :id", {"id": layout_id})
-        if not row:
-            raise HTTPException(status_code=404, detail="Not found")
-        if row["plate_id"]:
-            raise HTTPException(status_code=409, detail="This layout already has a plate")
-        # A gang plan spread over several plates has no single repeat, so there
-        # is no one plate to make from it.
-        if not row["repeat_mm"]:
-            raise HTTPException(
-                status_code=400,
-                detail="This layout has no single repeat to make a plate from — open it and pick one plate first.",
-            )
-
-        order = None
-        if row["order_id"]:
-            order = await database.fetch_one(
-                "SELECT * FROM vault_orders WHERE id = :id", {"id": row["order_id"]}
-            )
-
-        given = body.model_dump() if body else {}
         plate_id = _new_id()
         plate = {
             "id": plate_id,
             "created_at": _now(),
-            "plate_number": (given.get("plate_number") or "").strip()
-            or f"PL-{(order['order_number'] if order else row['id'][:6]).upper()}",
+            "layout_id": row["id"],
+            "plate_number": number,
             "vendor_id": given.get("vendor_id"),
             "die_id": given.get("die_id") or (order["die_id"] if order else None),
             "mould_id": given.get("mould_id"),
             "made_on": given.get("made_on"),
-            "repeat_mm": row["repeat_mm"],
-            "web_width": row["web_width"],
+            "repeat_mm": repeat_mm,
+            "web_width": web_width,
             "colours": row["colours"],
             "plate_sets": row["plate_sets"] or 1,
             "artwork_label": given.get("artwork_label"),
             "kld_label": given.get("kld_label"),
             "actual_cost_minor": given.get("actual_cost_minor")
             if given.get("actual_cost_minor") is not None
-            else row["plate_cost_minor"],
+            else cost_minor,
             "currency": given.get("currency") or "INR",
             "paid_by": given.get("paid_by"),
             "paid_by_note": given.get("paid_by_note"),
@@ -1237,12 +1217,60 @@ def build(database, require_admin, upload_dir: Path):
         cols = ", ".join(plate.keys())
         vals = ", ".join(f":{k}" for k in plate.keys())
         await database.execute(f"INSERT INTO vault_plates ({cols}) VALUES ({vals})", plate)
-
-        # The order's artwork goes on the plate, which is what gives the plate
-        # its artwork name.
-        if order and order["artwork_id"]:
-            await _write_lines(plate_id, [PlateLine(artwork_id=order["artwork_id"], ups=row["per_rev"])])
+        if lines:
+            await _write_lines(plate_id, lines)
         await _derive_labels(plate_id)
+        return plate_id
+
+    @router.post("/layouts/{layout_id}/plate")
+    async def plate_from_layout(
+        layout_id: str, body: Optional[PlateFromLayout] = None, _: bool = Depends(require_admin)
+    ):
+        """
+        Turn a saved layout into a plate record.
+
+        Everything the plate needs is already in the layout — the repeat, the web
+        width, the colours and what it works out at — and everything else comes
+        from the order it was saved against, so nothing is retyped.
+        """
+        row = await database.fetch_one("SELECT * FROM vault_layouts WHERE id = :id", {"id": layout_id})
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        made = await database.fetch_one(
+            "SELECT COUNT(*) AS n FROM vault_plates WHERE layout_id = :id", {"id": layout_id}
+        )
+        if (made and made["n"]) or row["plate_id"]:
+            raise HTTPException(status_code=409, detail="This layout already has a plate")
+        # A gang plan spread over several plates has no single repeat, so there
+        # is no one plate to make from it.
+        if not row["repeat_mm"]:
+            raise HTTPException(
+                status_code=400,
+                detail="This layout has no single repeat to make a plate from — open it and pick one plate first.",
+            )
+
+        order = None
+        if row["order_id"]:
+            order = await database.fetch_one(
+                "SELECT * FROM vault_orders WHERE id = :id", {"id": row["order_id"]}
+            )
+
+        given = body.model_dump() if body else {}
+        plate_id = await _plate_row(
+            row,
+            order,
+            given,
+            number=(given.get("plate_number") or "").strip()
+            or f"PL-{(order['order_number'] if order else row['id'][:6]).upper()}",
+            repeat_mm=row["repeat_mm"],
+            web_width=row["web_width"],
+            cost_minor=row["plate_cost_minor"],
+            lines=(
+                [PlateLine(artwork_id=order["artwork_id"], ups=row["per_rev"])]
+                if order and order["artwork_id"]
+                else []
+            ),
+        )
 
         await database.execute(
             "UPDATE vault_layouts SET plate_id = :plate WHERE id = :id", {"plate": plate_id, "id": layout_id}
@@ -1253,6 +1281,79 @@ def build(database, require_admin, upload_dir: Path):
                 {"plate": plate_id, "now": _now(), "id": order["id"]},
             )
         return await _plate_with_lines(plate_id)
+
+    @router.post("/layouts/{layout_id}/plates")
+    async def plates_from_layout(layout_id: str, _: bool = Depends(require_admin)):
+        """
+        Make every plate of a gang run at once.
+
+        The saved payload holds each plate's own geometry and cost, and which
+        vault artwork each SKU on it is, so a five-plate job becomes five plate
+        records with the right artworks on each — rather than one record that
+        pretends the job had a single repeat.
+        """
+        row = await database.fetch_one("SELECT * FROM vault_layouts WHERE id = :id", {"id": layout_id})
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        made = await database.fetch_one(
+            "SELECT COUNT(*) AS n FROM vault_plates WHERE layout_id = :id", {"id": layout_id}
+        )
+        if made and made["n"]:
+            raise HTTPException(status_code=409, detail=f"This layout already has {made['n']} plates")
+
+        try:
+            payload = json.loads(row["payload"]) if row["payload"] else {}
+        except (TypeError, ValueError):
+            payload = {}
+        plan = payload.get("plates") or []
+        if not plan:
+            raise HTTPException(
+                status_code=400, detail="This layout was saved without its plate plan — recalculate and save it again"
+            )
+
+        mapping = payload.get("skuArtworks") or {}
+        known = set()
+        for artwork_id in set(mapping.values()):
+            if artwork_id and await _exists("vault_artworks", artwork_id):
+                known.add(artwork_id)
+
+        order = None
+        if row["order_id"]:
+            order = await database.fetch_one(
+                "SELECT * FROM vault_orders WHERE id = :id", {"id": row["order_id"]}
+            )
+        base = (order["order_number"] if order else row["id"][:6]).upper()
+
+        created = []
+        for i, plate in enumerate(plan, start=1):
+            # Only lanes whose SKU is a known artwork become plate lines; the
+            # rest leave the plate short rather than inventing a link.
+            lines, seen = [], set()
+            for lane in plate.get("lanes") or []:
+                artwork_id = mapping.get(lane.get("id"))
+                if artwork_id in known and artwork_id not in seen:
+                    seen.add(artwork_id)
+                    lines.append(PlateLine(artwork_id=artwork_id, ups=lane.get("perRev")))
+            plate_id = await _plate_row(
+                row,
+                order,
+                {},
+                number=f"PL-{base}-{i}",
+                repeat_mm=plate.get("repeat"),
+                web_width=plate.get("webWidth"),
+                cost_minor=(
+                    round(plate["plateCost"] * CURRENCY_MINOR) if plate.get("plateCost") is not None else None
+                ),
+                lines=lines,
+            )
+            created.append(await _plate_with_lines(plate_id))
+
+        if order and not order["plate_id"] and created:
+            await database.execute(
+                "UPDATE vault_orders SET plate_id = :plate, updated_at = :now WHERE id = :id",
+                {"plate": created[0]["id"], "now": _now(), "id": order["id"]},
+            )
+        return {"items": created, "count": len(created)}
 
     @router.delete("/layouts/{layout_id}")
     async def delete_layout(layout_id: str, _: bool = Depends(require_admin)):

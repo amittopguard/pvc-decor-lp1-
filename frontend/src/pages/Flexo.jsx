@@ -339,9 +339,34 @@ export default function Flexo() {
       const t = gangResult.totals;
       const priced = gangResult.rankedBy === "cost";
       const single = gangResult.plates.length === 1 ? gangResult.plates[0].plan : null;
+      // Each plate's own geometry and cost travel with the layout, so the vault
+      // can make every one of them instead of a single record that pretends the
+      // job had one repeat.
+      shared.payload.plates = gangResult.plates.map((p) => ({
+        index: p.index,
+        webWidth: p.plan.webWidth,
+        repeat: p.plan.repeat,
+        teeth: p.plan.teeth,
+        perRev: p.plan.perRev,
+        utilisation: p.plan.utilisation,
+        materialArea: p.plan.materialArea,
+        revolutions: p.plan.revolutions,
+        plateCost: p.cost ? p.cost.plateCost : null,
+        materialCost: p.cost ? p.cost.materialCost : null,
+        lanes: p.plan.lanes.map((l) => ({
+          id: l.id,
+          name: l.name,
+          lanes: l.lanes,
+          around: l.around,
+          perRev: l.perRev,
+          ordered: l.ordered,
+          printed: l.printed,
+        })),
+      }));
       return {
         ...shared,
         kind: "gang",
+        skus: project.skus.filter((s) => s.enabled !== false && s.width && s.height && s.qty),
         quantity: t.ordered,
         web_width: single ? single.webWidth : null,
         repeat_mm: single ? single.repeat : null,

@@ -560,6 +560,14 @@ const waitFor = async (url, tries = 60) => {
     /^[2-9]\d* plates, 10 SKUs$/.test(gangName || ""),
     `${gangName}`
   );
+  // Say which artwork each SKU is, so the plates come out with artwork on them.
+  const mapped = await page.locator("select[aria-label^='Artwork for ']").count();
+  check("every SKU is offered an artwork to match", mapped === 10, `${mapped} selects`);
+  for (const code of ["AW-1", "AW-2", "AW-3"]) {
+    await page
+      .locator(`select[aria-label='Artwork for Label ${code.slice(-1)}']`)
+      .selectOption({ label: `${code} — Label ${code}` });
+  }
   await page.locator("[aria-label='Save the layout to this order']").selectOption({ index: 1 });
   await page.locator("[aria-label='Saved by']").fill("Design Meera");
   await tap("button:has-text('Save to vault')");
@@ -603,9 +611,32 @@ const waitFor = async (url, tries = 60) => {
     boardText.slice(-400)
   );
 
+  // And the gang plan makes every one of its plates in one go.
+  const allButton = page.locator("button:has-text('Make all')").first();
+  const allLabel = await allButton.innerText();
+  check("the gang plan offers every plate at once", /Make all [2-9]\d* plates/.test(allLabel), allLabel);
+  const wanted = parseInt(allLabel.replace(/\D+/g, ""), 10);
+  await allButton.dispatchEvent("click");
+  await page.waitForFunction(() => !/Make all/.test(document.querySelector("main")?.innerText || ""), null, {
+    timeout: 30000,
+  });
+  await settle();
+  await hideToasts();
+  boardText = await page.locator("main").innerText();
+  check("and reports how many it made", new RegExp(`${wanted} plates`).test(boardText), boardText.slice(-400));
+
   await tap("button:has-text('Plates')");
   await settle();
   await hideToasts();
+  const gangPlates = await page.locator("tbody tr:has-text('PL-SO-1-')").count();
+  check(
+    "one plate record per gang plate",
+    gangPlates === wanted,
+    `${gangPlates} rows for ${wanted} plates`
+  );
+  const withArt = await page.locator("tbody tr:has-text('PL-SO-1-'):has-text('Label AW-')").count();
+  check("the matched SKUs put their artwork on their plates", withArt > 0, `${withArt} plates carry artwork`);
+
   const plateRows = await page.locator("tbody tr:has-text('PL-SO-1')").first().innerText();
   check("the plate carries the order's artwork", /AW-/.test(plateRows) || /Label AW/.test(plateRows), plateRows);
   check("and the KLD it was cut against", /KLD-101/.test(plateRows), plateRows);

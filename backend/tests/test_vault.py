@@ -664,6 +664,70 @@ def run(client):
     check("but the layout is still there", unhooked["plate_id"] is None, str(unhooked["plate_id"]))
     check("so a fresh plate can be made from it", client.post(f"/vault/layouts/{layout['id']}/plate").status_code == 200)
 
+    section("19b. A gang run makes all its plates at once")
+    gang_order = client.post(
+        "/vault/orders",
+        json={"order_number": "SO-GANG", "customer_id": customer["id"], "die_id": die["id"],
+              "quantity": 150000, "raised_by": "CRM Anita"},
+    ).json()
+    gang = client.post(
+        "/vault/layouts",
+        json={
+            "order_id": gang_order["id"], "kind": "gang", "unit": "mm", "colours": 4, "plate_sets": 1,
+            "quantity": 150000, "material_area": 900000000, "ranked_by": "cost",
+            "plate_cost_minor": 700000, "total_cost_minor": 1900000, "per_thousand_minor": 12666,
+            "payload": {
+                "skuArtworks": {"a": artworks[0]["id"], "b": artworks[1]["id"], "c": "not-a-real-artwork"},
+                "plates": [
+                    {"index": 1, "webWidth": 330, "repeat": 254, "teeth": 80, "plateCost": 4290,
+                     "lanes": [{"id": "a", "name": "A", "perRev": 6}, {"id": "b", "name": "B", "perRev": 3}]},
+                    {"index": 2, "webWidth": 420, "repeat": 292.1, "teeth": 92, "plateCost": 2710,
+                     "lanes": [{"id": "c", "name": "C", "perRev": 4}]},
+                ],
+            },
+        },
+    ).json()
+
+    made_all = client.post(f"/vault/layouts/{gang['id']}/plates")
+    check("every plate of the gang is made", made_all.status_code == 200, made_all.text[:200])
+    made_all = made_all.json()
+    check("one record per plate", made_all["count"] == 2, str(made_all["count"]))
+    check("numbered from the order", [p["plate_number"] for p in made_all["items"]] == ["PL-SO-GANG-1", "PL-SO-GANG-2"],
+          str([p["plate_number"] for p in made_all["items"]]))
+    check("each takes its own repeat", abs(made_all["items"][1]["repeat_mm"] - 292.1) < 1e-9,
+          str(made_all["items"][1]["repeat_mm"]))
+    check("and its own web width", made_all["items"][0]["web_width"] == 330)
+    check("and its own share of the plate bill", made_all["items"][0]["actual_cost_minor"] == 429000,
+          str(made_all["items"][0]["actual_cost_minor"]))
+    check("the two artworks on plate one are both on it", len(made_all["items"][0]["lines"]) == 2,
+          str(made_all["items"][0]["lines"]))
+    check("so its name carries both", " + " in (made_all["items"][0]["artwork_label"] or ""),
+          str(made_all["items"][0]["artwork_label"]))
+    check("a SKU that is not a known artwork leaves its plate empty rather than inventing a link",
+          len(made_all["items"][1]["lines"]) == 0, str(made_all["items"][1]["lines"]))
+    check("every plate still names the order's KLD", all(p["kld_label"] == die_now["kld_number"] for p in made_all["items"]))
+
+    counted = client.get(f"/vault/layouts/{gang['id']}").json()
+    check("the layout counts the plates made from it", counted["plate_count"] == 2, str(counted["plate_count"]))
+    check(
+        "making them twice is refused",
+        client.post(f"/vault/layouts/{gang['id']}/plates").status_code == 409,
+    )
+    check(
+        "and so is making a single plate from the same layout",
+        client.post(f"/vault/layouts/{gang['id']}/plate").status_code in (400, 409),
+    )
+    reorder = client.get(f"/vault/orders/{gang_order['id']}").json()
+    check("the order picks up the first plate", reorder["plate_id"] == made_all["items"][0]["id"])
+
+    bare = client.post(
+        "/vault/layouts", json={"kind": "gang", "name": "no plan", "payload": {"label": {}}}
+    ).json()
+    check(
+        "a layout saved without its plate plan says so rather than making nothing",
+        client.post(f"/vault/layouts/{bare['id']}/plates").status_code == 400,
+    )
+
     section("20. One set of rates for the whole shop")
     fresh = client.get("/vault/settings/rates").json()
     check("rates come back before anyone has set them", fresh["set"] is False, str(fresh))

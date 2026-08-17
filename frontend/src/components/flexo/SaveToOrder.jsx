@@ -9,6 +9,7 @@ import {
   hasToken,
   listLayouts,
   listOrders,
+  listRecords,
   formatMoney,
 } from "@/lib/vault/api";
 
@@ -27,10 +28,14 @@ export default function SaveToOrder({ draft, onOpen }) {
   const [signedIn, setSignedIn] = useState(hasToken());
   const [orders, setOrders] = useState([]);
   const [saved, setSaved] = useState([]);
+  const [artworks, setArtworks] = useState([]);
   const [orderId, setOrderId] = useState("");
   const [name, setName] = useState("");
   const [savedBy, setSavedBy] = useState("");
   const [busy, setBusy] = useState(false);
+  // Which vault artwork each SKU on a gang plate is. Without it the plates can
+  // still be made, but they come out with no artwork on them.
+  const [skuArtworks, setSkuArtworks] = useState({});
 
   const load = useCallback(async () => {
     if (!hasToken()) {
@@ -38,9 +43,10 @@ export default function SaveToOrder({ draft, onOpen }) {
       return;
     }
     try {
-      const [o, l] = await Promise.all([listOrders(), listLayouts()]);
+      const [o, l, a] = await Promise.all([listOrders(), listLayouts(), listRecords("artworks")]);
       setOrders(o);
       setSaved(l);
+      setArtworks(a);
       setSignedIn(true);
     } catch (e) {
       // A stale token is the ordinary case here, not a failure worth shouting about.
@@ -52,14 +58,39 @@ export default function SaveToOrder({ draft, onOpen }) {
     load();
   }, [load]);
 
+  // Guess the obvious ones — a SKU called exactly what an artwork is called is
+  // that artwork — and leave the rest for a person to say.
+  const skus = draft?.skus;
+  useEffect(() => {
+    if (!skus?.length || !artworks.length) return;
+    setSkuArtworks((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const sku of skus) {
+        if (next[sku.id]) continue;
+        const name = String(sku.name || "").trim().toLowerCase();
+        if (!name) continue;
+        const hit = artworks.find(
+          (a) => String(a.code || "").toLowerCase() === name || String(a.name || "").toLowerCase() === name
+        );
+        if (hit) {
+          next[sku.id] = hit.id;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [skus, artworks]);
+
   const save = async () => {
     if (!draft) return;
     setBusy(true);
     try {
-      // The two display-only fields belong to this screen, not to the record.
-      const { suggestedName, describe, ...record } = draft;
+      // These belong to this screen, not to the record.
+      const { suggestedName, describe, skus, ...record } = draft;
       const row = await createLayout({
         ...record,
+        payload: { ...record.payload, skuArtworks },
         order_id: orderId || null,
         name: name.trim() || null,
         saved_by: savedBy.trim() || null,
@@ -134,6 +165,44 @@ export default function SaveToOrder({ draft, onOpen }) {
           />
         </label>
       </div>
+
+      {skus?.length > 0 && (
+        <div className="border-t border-slate-100 px-3 py-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Which artwork is each SKU?
+          </h3>
+          <p className="mb-2 text-[11px] text-slate-500">
+            Say this once and the vault can make every plate of the run with the right artwork on it. A SKU left
+            blank still gets its plate — just an empty one.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {skus.map((s) => (
+              <label key={s.id} className="flex flex-col gap-1">
+                <span className="truncate text-xs font-medium text-slate-700">{s.name || s.id}</span>
+                <select
+                  className={inputClass}
+                  aria-label={`Artwork for ${s.name || s.id}`}
+                  value={skuArtworks[s.id] || ""}
+                  onChange={(e) => setSkuArtworks((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                >
+                  <option value="">— not matched —</option>
+                  {artworks.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.code}
+                      {a.name ? ` — ${a.name}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+          {!artworks.length && (
+            <p className="mt-2 text-[11px] text-orange-700">
+              No artwork in the vault yet — add it there first if you want it on the plates.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2">
         <span className="text-xs text-slate-500">{draft?.describe || "Calculate a layout first."}</span>

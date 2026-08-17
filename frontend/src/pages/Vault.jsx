@@ -31,6 +31,7 @@ import {
   listPlates,
   listRecords,
   plateFromLayout,
+  platesFromLayout,
   reportArtworks,
   reportCost,
   reportKld,
@@ -367,6 +368,11 @@ export default function Vault() {
               const plate = await plateFromLayout(id);
               await loadAll();
               toast.success(`Plate ${plate.plate_number} made from the layout.`);
+            }}
+            onMakeAllPlates={async (id) => {
+              const made = await platesFromLayout(id);
+              await loadAll();
+              toast.success(`${made.count} plates made from the layout.`);
             }}
             onDeleteLayout={async (id) => {
               await deleteLayout(id);

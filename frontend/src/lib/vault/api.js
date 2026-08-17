@@ -40,6 +40,7 @@ export const getLayout = (id) => unwrap(adminApi.get(`/vault/layouts/${id}`));
 export const createLayout = (body) => unwrap(adminApi.post("/vault/layouts", body));
 export const deleteLayout = (id) => unwrap(adminApi.delete(`/vault/layouts/${id}`));
 export const plateFromLayout = (id, body = {}) => unwrap(adminApi.post(`/vault/layouts/${id}/plate`, body));
+export const platesFromLayout = (id) => unwrap(adminApi.post(`/vault/layouts/${id}/plates`));
 
 export const reportOrders = () => unwrap(adminApi.get("/vault/reports/orders"));
 export const reportPlateCharges = () => unwrap(adminApi.get("/vault/reports/plate-charges"));
