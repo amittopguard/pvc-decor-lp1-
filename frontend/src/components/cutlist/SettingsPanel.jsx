@@ -6,10 +6,10 @@ import { getUnit } from "@/lib/cutlist/units";
 function Field({ label, hint, children }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="flex items-center gap-1 text-xs font-medium text-slate-700">
+      <span className="flex items-center gap-1 text-xs font-medium text-slate-700 dark:text-slate-300">
         {label}
         {hint && (
-          <span title={hint} className="text-slate-400">
+          <span title={hint} className="text-slate-400 dark:text-slate-500">
             <Info className="h-3 w-3" />
           </span>
         )}
@@ -20,7 +20,7 @@ function Field({ label, hint, children }) {
 }
 
 const inputClass =
-  "w-full border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none " +
+  "w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1.5 text-sm text-slate-900 dark:text-slate-100 outline-none " +
   "focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30";
 
 function Toggle({ checked, onChange, label, hint }) {
@@ -33,8 +33,8 @@ function Toggle({ checked, onChange, label, hint }) {
         className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-orange-600"
       />
       <span>
-        <span className="block text-sm text-slate-800">{label}</span>
-        {hint && <span className="block text-xs text-slate-500">{hint}</span>}
+        <span className="block text-sm text-slate-800 dark:text-slate-200">{label}</span>
+        {hint && <span className="block text-xs text-slate-500 dark:text-slate-400">{hint}</span>}
       </span>
     </label>
   );
@@ -92,7 +92,7 @@ export default function SettingsPanel({ settings, unit, showMaterial, onToggleMa
         </Field>
       </div>
 
-      <div className="border-t border-slate-100 px-3 py-2">
+      <div className="border-t border-slate-100 dark:border-slate-800 px-3 py-2">
         <Toggle
           checked={settings.considerGrain}
           onChange={(v) => set({ considerGrain: v })}

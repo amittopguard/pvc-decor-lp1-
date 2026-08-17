@@ -11,11 +11,11 @@ export default function LayoutKey() {
   const [open, setOpen] = useState(false);
 
   return (
-    <section className="border border-slate-200 bg-white print:hidden">
+    <section className="border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 print:hidden">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
         aria-expanded={open}
       >
         {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -23,7 +23,7 @@ export default function LayoutKey() {
       </button>
 
       {open && (
-        <div className="border-t border-slate-100 p-3">
+        <div className="border-t border-slate-100 dark:border-slate-800 p-3">
           <svg
             viewBox="0 0 900 690"
             className="h-auto w-full"
@@ -132,16 +132,16 @@ export default function LayoutKey() {
             </g>
           </svg>
 
-          <dl className="mt-3 space-y-1.5 text-xs text-slate-600">
+          <dl className="mt-3 space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
             <div>
-              <dt className="inline font-semibold text-slate-800">Gap around costs almost nothing.</dt>{" "}
+              <dt className="inline font-semibold text-slate-800 dark:text-slate-200">Gap around costs almost nothing.</dt>{" "}
               <dd className="inline">
                 You set the minimum; the real gap grows so the rows fill the repeat exactly, because the cylinder must
                 come back to the same place.
               </dd>
             </div>
             <div>
-              <dt className="inline font-semibold text-slate-800">Gutter and edge margin cost width.</dt>{" "}
+              <dt className="inline font-semibold text-slate-800 dark:text-slate-200">Gutter and edge margin cost width.</dt>{" "}
               <dd className="inline">
                 Both are paid for on every metre of the run. More lanes spread the fixed edge margin over more labels.
               </dd>

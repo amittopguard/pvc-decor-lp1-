@@ -14,7 +14,7 @@ import {
 } from "@/lib/vault/api";
 
 const inputClass =
-  "w-full border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none " +
+  "w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1.5 text-sm text-slate-900 dark:text-slate-100 outline-none " +
   "focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30";
 
 /**
@@ -108,10 +108,10 @@ export default function SaveToOrder({ draft, onOpen }) {
   if (!signedIn) {
     return (
       <Panel title="Save this layout" subtitle="Keep a calculation beyond this browser">
-        <p className="p-3 text-xs text-slate-600">
+        <p className="p-3 text-xs text-slate-600 dark:text-slate-400">
           Layouts are saved into the artwork &amp; plate vault against an order, so anyone can see them and the
           plate can be made from them.{" "}
-          <a href="/vault" className="text-orange-700 underline-offset-2 hover:underline">
+          <a href="/vault" className="text-orange-700 dark:text-orange-400 underline-offset-2 hover:underline">
             Sign in to the vault
           </a>{" "}
           and come back — until then this page only remembers your work in this browser.
@@ -127,7 +127,7 @@ export default function SaveToOrder({ draft, onOpen }) {
     >
       <div className="grid grid-cols-2 gap-3 p-3 md:grid-cols-4">
         <label className="flex flex-col gap-1 md:col-span-2">
-          <span className="text-xs font-medium text-slate-700">Order</span>
+          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Order</span>
           <select
             className={inputClass}
             aria-label="Save the layout to this order"
@@ -145,7 +145,7 @@ export default function SaveToOrder({ draft, onOpen }) {
           </select>
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-slate-700">Name</span>
+          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Name</span>
           <input
             className={inputClass}
             aria-label="Layout name"
@@ -155,7 +155,7 @@ export default function SaveToOrder({ draft, onOpen }) {
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-slate-700">Saved by</span>
+          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Saved by</span>
           <input
             className={inputClass}
             aria-label="Saved by"
@@ -167,18 +167,18 @@ export default function SaveToOrder({ draft, onOpen }) {
       </div>
 
       {skus?.length > 0 && (
-        <div className="border-t border-slate-100 px-3 py-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+        <div className="border-t border-slate-100 dark:border-slate-800 px-3 py-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-400">
             Which artwork is each SKU?
           </h3>
-          <p className="mb-2 text-[11px] text-slate-500">
+          <p className="mb-2 text-[11px] text-slate-500 dark:text-slate-400">
             Say this once and the vault can make every plate of the run with the right artwork on it. A SKU left
             blank still gets its plate — just an empty one.
           </p>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {skus.map((s) => (
               <label key={s.id} className="flex flex-col gap-1">
-                <span className="truncate text-xs font-medium text-slate-700">{s.name || s.id}</span>
+                <span className="truncate text-xs font-medium text-slate-700 dark:text-slate-300">{s.name || s.id}</span>
                 <select
                   className={inputClass}
                   aria-label={`Artwork for ${s.name || s.id}`}
@@ -197,25 +197,25 @@ export default function SaveToOrder({ draft, onOpen }) {
             ))}
           </div>
           {!artworks.length && (
-            <p className="mt-2 text-[11px] text-orange-700">
+            <p className="mt-2 text-[11px] text-orange-700 dark:text-orange-400">
               No artwork in the vault yet — add it there first if you want it on the plates.
             </p>
           )}
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2">
-        <span className="text-xs text-slate-500">{draft?.describe || "Calculate a layout first."}</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 px-3 py-2">
+        <span className="text-xs text-slate-500 dark:text-slate-400">{draft?.describe || "Calculate a layout first."}</span>
         <ToolButton variant="primary" onClick={save} disabled={busy || !draft}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save to vault
         </ToolButton>
       </div>
 
       {saved.length > 0 && (
-        <div className="relative overflow-x-auto border-t border-slate-100">
+        <div className="relative overflow-x-auto border-t border-slate-100 dark:border-slate-800">
           <table className="w-full min-w-[620px] border-collapse text-xs">
             <thead>
-              <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+              <tr className="border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
                 <th className="px-2 py-1.5 text-left font-medium">Layout</th>
                 <th className="px-2 py-1.5 text-left font-medium">Order</th>
                 <th className="px-2 py-1.5 text-right font-medium">Web</th>
@@ -226,28 +226,28 @@ export default function SaveToOrder({ draft, onOpen }) {
             </thead>
             <tbody>
               {saved.map((l) => (
-                <tr key={l.id} className="border-b border-slate-100 last:border-0">
+                <tr key={l.id} className="border-b border-slate-100 dark:border-slate-800 last:border-0">
                   <td className="px-2 py-1.5">
                     <button
                       type="button"
-                      className="font-medium text-orange-700 underline-offset-2 hover:underline"
+                      className="font-medium text-orange-700 dark:text-orange-400 underline-offset-2 hover:underline"
                       onClick={() => onOpen(l)}
                       title="Load this layout back into the optimiser"
                     >
                       {l.name}
                     </button>
-                    {l.saved_by && <span className="block text-[11px] text-slate-500">{l.saved_by}</span>}
+                    {l.saved_by && <span className="block text-[11px] text-slate-500 dark:text-slate-400">{l.saved_by}</span>}
                   </td>
                   <td className="px-2 py-1.5">
                     {l.order_number || "—"}
-                    {l.customer_name && <span className="block text-[11px] text-slate-500">{l.customer_name}</span>}
+                    {l.customer_name && <span className="block text-[11px] text-slate-500 dark:text-slate-400">{l.customer_name}</span>}
                   </td>
                   <td className="px-2 py-1.5 text-right tabular-nums">{l.web_width ?? "—"}</td>
                   <td className="px-2 py-1.5 text-right tabular-nums">
                     {l.per_thousand_minor ? formatMoney(l.per_thousand_minor) : "—"}
                   </td>
                   <td className="px-2 py-1.5">
-                    {l.plate_number || <span className="text-slate-400">not made yet</span>}
+                    {l.plate_number || <span className="text-slate-400 dark:text-slate-500">not made yet</span>}
                   </td>
                   <td className="px-1 py-1 text-right">
                     <IconButton

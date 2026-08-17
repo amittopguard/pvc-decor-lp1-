@@ -2,7 +2,7 @@ import React from "react";
 import { cn } from "@/lib/utils";
 
 const cellBase =
-  "w-full bg-transparent px-2 py-1.5 text-sm text-slate-900 outline-none focus:bg-white " +
+  "w-full bg-transparent px-2 py-1.5 text-sm text-slate-900 dark:text-slate-100 outline-none focus:bg-white " +
   "focus:ring-2 focus:ring-orange-500/60 rounded-none placeholder:text-slate-300";
 
 export function NumberCell({ value, onChange, onPasteRows, align = "right", ...rest }) {
@@ -65,8 +65,8 @@ export function IconButton({ children, className, ...rest }) {
     <button
       type="button"
       className={cn(
-        "inline-flex h-7 w-7 items-center justify-center text-slate-400 transition-colors",
-        "hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500/60",
+        "inline-flex h-7 w-7 items-center justify-center text-slate-400 dark:text-slate-500 transition-colors",
+        "hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 focus:outline-none focus:ring-2 focus:ring-orange-500/60",
         "disabled:cursor-not-allowed disabled:opacity-40",
         className
       )}
@@ -80,9 +80,9 @@ export function IconButton({ children, className, ...rest }) {
 export function ToolButton({ children, variant = "default", className, ...rest }) {
   const styles = {
     default:
-      "border border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50",
+      "border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800",
     primary: "border border-orange-600 bg-orange-600 text-white hover:bg-orange-700 hover:border-orange-700",
-    ghost: "border border-transparent text-slate-600 hover:bg-slate-100",
+    ghost: "border border-transparent text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800",
   };
   return (
     <button
@@ -102,11 +102,11 @@ export function ToolButton({ children, variant = "default", className, ...rest }
 
 export function Panel({ title, subtitle, actions, children, className }) {
   return (
-    <section className={cn("border border-slate-200 bg-white", className)}>
-      <header className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+    <section className={cn("border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900", className)}>
+      <header className="flex items-center justify-between gap-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2">
         <div className="min-w-0">
-          <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-slate-900">{title}</h2>
-          {subtitle && <p className="truncate text-xs text-slate-500">{subtitle}</p>}
+          <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">{title}</h2>
+          {subtitle && <p className="truncate text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
       </header>

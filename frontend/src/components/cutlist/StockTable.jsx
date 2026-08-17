@@ -62,7 +62,7 @@ export default function StockTable({
         {/* The minimum width keeps the number cells legible; narrow screens scroll. */}
         <table className={`w-full border-collapse text-sm ${showMaterial ? "min-w-[620px]" : "min-w-[520px]"}`}>
           <thead>
-            <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <th className="w-8 px-2 py-1.5">
                 <span className="sr-only">Enabled</span>
               </th>
@@ -78,7 +78,7 @@ export default function StockTable({
             {stock.map((s, index) => (
               <tr
                 key={s.id}
-                className={`border-b border-slate-100 last:border-0 ${s.enabled === false ? "opacity-45" : ""}`}
+                className={`border-b border-slate-100 dark:border-slate-800 last:border-0 ${s.enabled === false ? "opacity-45" : ""}`}
               >
                 <td className="px-2 text-center">
                   <CheckCell
@@ -87,7 +87,7 @@ export default function StockTable({
                     title="Use this stock size"
                   />
                 </td>
-                <td className="border-l border-slate-100 p-0">
+                <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                   <NumberCell
                     value={s.length}
                     onChange={(v) => {
@@ -99,7 +99,7 @@ export default function StockTable({
                     aria-label={`Stock ${index + 1} length`}
                   />
                 </td>
-                <td className="border-l border-slate-100 p-0">
+                <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                   <NumberCell
                     value={s.width}
                     onChange={(v) => {
@@ -111,7 +111,7 @@ export default function StockTable({
                     aria-label={`Stock ${index + 1} width`}
                   />
                 </td>
-                <td className="border-l border-slate-100 p-0">
+                <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                   <NumberCell
                     value={s.qty}
                     onChange={(v) => update(s.id, { qty: v })}
@@ -119,7 +119,7 @@ export default function StockTable({
                     aria-label={`Stock ${index + 1} quantity`}
                   />
                 </td>
-                <td className="border-l border-slate-100 p-0">
+                <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                   <TextCell
                     value={s.label}
                     onChange={(v) => update(s.id, { label: v })}
@@ -128,7 +128,7 @@ export default function StockTable({
                   />
                 </td>
                 {showMaterial && (
-                  <td className="border-l border-slate-100 p-0">
+                  <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                     <TextCell
                       value={s.material}
                       onChange={(v) => update(s.id, { material: v })}
@@ -151,8 +151,8 @@ export default function StockTable({
         </table>
       </div>
       {presets && presets.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-3 py-2">
-          <span className="text-[11px] uppercase tracking-wide text-slate-500">Standard sizes</span>
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 dark:border-slate-800 px-3 py-2">
+          <span className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">Standard sizes</span>
           {presets.map((p) => (
             <button
               key={p.label}
@@ -163,26 +163,26 @@ export default function StockTable({
                   emptyStock({ length: p.length, width: p.width, label: p.label, qty: 0 }),
                 ])
               }
-              className="border border-slate-300 px-2 py-0.5 text-xs text-slate-700 hover:border-orange-500 hover:text-orange-700"
+              className="border border-slate-300 dark:border-slate-600 px-2 py-0.5 text-xs text-slate-700 dark:text-slate-300 hover:border-orange-500 hover:text-orange-700"
             >
               {p.label}
             </button>
           ))}
         </div>
       )}
-      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400">
         <span>
           {unlimited ? (
             "Unlimited supply available"
           ) : (
             <>
-              <strong className="tabular-nums text-slate-900">{totalSheets}</strong> sheets in stock
+              <strong className="tabular-nums text-slate-900 dark:text-slate-100">{totalSheets}</strong> sheets in stock
             </>
           )}
         </span>
         {!unlimited && (
           <span>
-            Total stock area <strong className="tabular-nums text-slate-900">{formatArea(totalArea, unit)}</strong>
+            Total stock area <strong className="tabular-nums text-slate-900 dark:text-slate-100">{formatArea(totalArea, unit)}</strong>
           </span>
         )}
       </footer>

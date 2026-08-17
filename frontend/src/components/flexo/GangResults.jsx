@@ -6,12 +6,12 @@ import { formatArea, formatLength, formatPercent, getUnit } from "@/lib/cutlist/
 import { formatPaise } from "@/lib/costing/costing";
 
 function Stat({ label, value, sub, tone = "default" }) {
-  const tones = { default: "text-slate-900", good: "text-emerald-600", warn: "text-orange-600", bad: "text-red-600" };
+  const tones = { default: "text-slate-900 dark:text-slate-100", good: "text-emerald-600 dark:text-emerald-400", warn: "text-orange-600", bad: "text-red-600 dark:text-red-400" };
   return (
-    <div className="border border-slate-200 bg-white px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
+    <div className="border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
       <div className={`font-display text-xl font-semibold tabular-nums ${tones[tone]}`}>{value}</div>
-      {sub && <div className="text-xs text-slate-500">{sub}</div>}
+      {sub && <div className="text-xs text-slate-500 dark:text-slate-400">{sub}</div>}
     </div>
   );
 }
@@ -51,8 +51,8 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragg
 
   return (
     <article
-      className={`border bg-white transition-colors print:break-inside-avoid ${
-        dropping ? "border-orange-500 ring-2 ring-orange-500/30" : "border-slate-200"
+      className={`border bg-white dark:bg-slate-900 transition-colors print:break-inside-avoid ${
+        dropping ? "border-orange-500 ring-2 ring-orange-500/30" : "border-slate-200 dark:border-slate-700"
       }`}
       onDragOver={move ? (e) => { e.preventDefault(); setDropping(true); } : undefined}
       onDragLeave={move ? () => setDropping(false) : undefined}
@@ -67,24 +67,24 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragg
           : undefined
       }
     >
-      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-slate-200 bg-slate-50 px-3 py-2">
-        <h3 className="font-display text-sm font-semibold text-slate-900">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2">
+        <h3 className="font-display text-sm font-semibold text-slate-900 dark:text-slate-100">
           Plate {plate.index} of {total}
-          <span className="ml-2 font-sans text-xs font-normal text-slate-500">
+          <span className="ml-2 font-sans text-xs font-normal text-slate-500 dark:text-slate-400">
             {plan.lanes.length} SKU{plan.lanes.length === 1 ? "" : "s"} · {plan.totalLanes} lanes · slit to{" "}
             {formatLength(plan.webWidth, unit)} {u.label}
           </span>
         </h3>
-        <div className="flex items-center gap-3 text-xs text-slate-600">
+        <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
           <span>
-            <strong className="tabular-nums text-slate-900">{plan.teeth}T</strong> ·{" "}
+            <strong className="tabular-nums text-slate-900 dark:text-slate-100">{plan.teeth}T</strong> ·{" "}
             {formatLength(plan.repeat, unit)} {u.label}
           </span>
-          <span className={plan.utilisation > 0.8 ? "text-emerald-600" : plan.utilisation > 0.65 ? "text-orange-600" : "text-red-600"}>
+          <span className={plan.utilisation > 0.8 ? "text-emerald-600 dark:text-emerald-400" : plan.utilisation > 0.65 ? "text-orange-600" : "text-red-600 dark:text-red-400"}>
             <strong className="tabular-nums">{formatPercent(plan.utilisation)}</strong> used
           </span>
           <span>
-            <strong className="tabular-nums text-slate-900">{plan.revolutions.toLocaleString()}</strong> turns
+            <strong className="tabular-nums text-slate-900 dark:text-slate-100">{plan.revolutions.toLocaleString()}</strong> turns
           </span>
         </div>
       </header>
@@ -93,10 +93,10 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragg
         <WebDiagram webWidth={plan.webWidth} repeat={plan.repeat} rects={rects} unit={unit} margin={margin} />
       </div>
 
-      <div className="relative overflow-x-auto border-t border-slate-100">
+      <div className="relative overflow-x-auto border-t border-slate-100 dark:border-slate-800">
         <table className="w-full min-w-[620px] border-collapse text-xs">
           <thead>
-            <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <th className="px-2 py-1.5 text-left font-medium">SKU</th>
               <th className="px-2 py-1.5 text-right font-medium">Lanes</th>
               <th className="px-2 py-1.5 text-right font-medium">Around</th>
@@ -113,14 +113,14 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragg
                 draggable={!!move}
                 onDragStart={move ? (e) => { e.dataTransfer.setData("text/plain", l.id); setDragging(l.id); } : undefined}
                 onDragEnd={move ? () => setDragging(null) : undefined}
-                className={`border-b border-slate-100 last:border-0 ${
+                className={`border-b border-slate-100 dark:border-slate-800 last:border-0 ${
                   move ? "cursor-grab active:cursor-grabbing hover:bg-orange-50/60" : ""
                 } ${dragging === l.id ? "opacity-40" : ""}`}
               >
                 <td className="px-2 py-1">
-                  {move && <GripVertical className="mr-1 inline h-3 w-3 align-middle text-slate-300 print:hidden" />}
+                  {move && <GripVertical className="mr-1 inline h-3 w-3 align-middle text-slate-300 dark:text-slate-600 print:hidden" />}
                   <span
-                    className="mr-2 inline-block h-2.5 w-2.5 border border-slate-300 align-middle"
+                    className="mr-2 inline-block h-2.5 w-2.5 border border-slate-300 dark:border-slate-600 align-middle"
                     style={{ background: colorOf(l.id) }}
                   />
                   {l.name}
@@ -135,7 +135,7 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragg
                       onClick={() => move(l.id, null)}
                       title={`Take ${l.name} off this run`}
                       aria-label={`Take ${l.name} off this run`}
-                      className="ml-1.5 align-middle text-slate-300 hover:text-red-600 print:hidden"
+                      className="ml-1.5 align-middle text-slate-300 dark:text-slate-600 hover:text-red-600 print:hidden"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -148,7 +148,7 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragg
                 <td className="px-2 py-1 text-right tabular-nums">{l.printed.toLocaleString()}</td>
                 <td
                   className={`px-2 py-1 text-right tabular-nums ${
-                    l.overrunPct > 0.15 ? "text-red-600" : l.overrunPct > 0.05 ? "text-orange-600" : "text-emerald-600"
+                    l.overrunPct > 0.15 ? "text-red-600 dark:text-red-400" : l.overrunPct > 0.05 ? "text-orange-600" : "text-emerald-600 dark:text-emerald-400"
                   }`}
                 >
                   {l.overrun.toLocaleString()} ({formatPercent(l.overrunPct, 1)})
@@ -160,21 +160,21 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragg
       </div>
 
       {plate.options && plate.options.length > 1 && (
-        <div className="border-t border-slate-100 print:hidden">
+        <div className="border-t border-slate-100 dark:border-slate-800 print:hidden">
           <button
             type="button"
             onClick={() => setShowOptions(!showOptions)}
-            className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-slate-600 hover:bg-slate-50"
+            className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
           >
             {showOptions ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
             Other cylinder options for this plate
-            <span className="text-slate-400">({plate.options.length - 1})</span>
+            <span className="text-slate-400 dark:text-slate-500">({plate.options.length - 1})</span>
           </button>
           {showOptions && (
             <div className="relative max-h-56 overflow-auto px-3 pb-3">
               <table className="w-full min-w-[420px] text-xs">
                 <thead>
-                  <tr className="text-left text-slate-500">
+                  <tr className="text-left text-slate-500 dark:text-slate-400">
                     <th className="py-1 font-medium">Slit to</th>
                     <th className="py-1 text-right font-medium">Teeth</th>
                     <th className="py-1 text-right font-medium">Turns</th>
@@ -184,7 +184,7 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragg
                 </thead>
                 <tbody>
                   {plate.options.slice(0, 12).map((o, i) => (
-                    <tr key={o.id} className={`border-t border-slate-100 ${i === 0 ? "font-medium" : ""}`}>
+                    <tr key={o.id} className={`border-t border-slate-100 dark:border-slate-800 ${i === 0 ? "font-medium" : ""}`}>
                       <td className="py-1 tabular-nums">{formatLength(o.webWidth, unit)}</td>
                       <td className="py-1 text-right tabular-nums">{o.teeth}</td>
                       <td className="py-1 text-right tabular-nums">{o.revolutions.toLocaleString()}</td>
@@ -206,10 +206,10 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
   const [dragging, setDragging] = useState(null);
   if (!result) {
     return (
-      <div className="flex min-h-[320px] flex-col items-center justify-center border border-dashed border-slate-300 bg-white p-8 text-center">
-        <Rows3 className="mb-3 h-8 w-8 text-slate-300" />
-        <p className="font-display text-base font-semibold text-slate-700">No gang plan yet</p>
-        <p className="mt-1 max-w-md text-sm text-slate-500">
+      <div className="flex min-h-[320px] flex-col items-center justify-center border border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-8 text-center">
+        <Rows3 className="mb-3 h-8 w-8 text-slate-300 dark:text-slate-600" />
+        <p className="font-display text-base font-semibold text-slate-700 dark:text-slate-300">No gang plan yet</p>
+        <p className="mt-1 max-w-md text-sm text-slate-500 dark:text-slate-400">
           List the SKUs sharing the run with their ordered quantities. Whatever will not fit the press width is split
           onto further plates, and each plate is planned so its SKUs finish together.
         </p>
@@ -219,7 +219,7 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
 
   if (!result.ok) {
     return (
-      <div className="border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div className="border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-4 text-sm text-red-700 dark:text-red-400">
         <AlertTriangle className="mb-2 h-5 w-5" />
         <ul className="ml-4 list-disc space-y-0.5">
           {result.errors.map((e, i) => (
@@ -267,15 +267,15 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
       </div>
 
       {result.manual && onReset && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border border-slate-300 bg-slate-50 px-3 py-2 text-xs print:hidden">
-          <span className="text-slate-600">
+        <div className="flex flex-wrap items-center justify-between gap-2 border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60 px-3 py-2 text-xs print:hidden">
+          <span className="text-slate-600 dark:text-slate-400">
             You moved these SKUs yourself, so the planner is not choosing the grouping any more. Each plate is
             still solved properly.
           </span>
           <button
             type="button"
             onClick={onReset}
-            className="inline-flex items-center gap-1.5 border border-slate-300 bg-white px-2 py-1 text-slate-700 hover:border-orange-500"
+            className="inline-flex items-center gap-1.5 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-slate-700 dark:text-slate-300 hover:border-orange-500"
           >
             <RotateCcw className="h-3.5 w-3.5" /> Back to the planner's split
           </button>
@@ -283,7 +283,7 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
       )}
 
       {t.plates > 1 && !result.manual && (
-        <div className="border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">
+        <div className="border border-orange-300 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/40 p-3 text-sm text-orange-900 dark:text-orange-200">
           <div className="mb-1 flex items-center gap-2 font-semibold">
             <AlertTriangle className="h-4 w-4" />
             {t.skus} SKUs will not fit one plate — split across {t.plates}
@@ -322,7 +322,7 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
       )}
 
       {onMove && (
-        <p className="px-1 text-xs text-slate-500 print:hidden">
+        <p className="px-1 text-xs text-slate-500 dark:text-slate-400 print:hidden">
           Drag a SKU onto another plate to move it, or × to take it off the run. The plate it lands on is worked
           out again from scratch — the grouping is yours, the layout is still solved.
         </p>
@@ -351,18 +351,18 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
             const id = e.dataTransfer.getData("text/plain");
             if (id) onMove(id, "new");
           }}
-          className="border-2 border-dashed border-orange-400 bg-orange-50/60 p-4 text-center text-xs text-orange-800 print:hidden"
+          className="border-2 border-dashed border-orange-400 bg-orange-50/60 p-4 text-center text-xs text-orange-800 dark:text-orange-300 print:hidden"
         >
           Drop here to give it a plate of its own
         </div>
       )}
 
       {result.alternatives && result.alternatives.length > 1 && (
-        <section className="border border-slate-200 bg-white print:hidden">
-          <header className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-            <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-slate-900">
+        <section className="border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 print:hidden">
+          <header className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2">
+            <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">
               Other ways to split
-              <span className="ml-2 font-sans text-xs font-normal normal-case text-slate-500">
+              <span className="ml-2 font-sans text-xs font-normal normal-case text-slate-500 dark:text-slate-400">
                 planned in {result.elapsedMs} ms
               </span>
             </h3>
@@ -370,7 +370,7 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
           <div className="relative overflow-x-auto">
             <table className="w-full min-w-[520px] border-collapse text-xs">
               <thead>
-                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   <th className="px-2 py-1.5 text-left font-medium">Grouping</th>
                   <th className="px-2 py-1.5 text-right font-medium">Plates</th>
                   <th className="px-2 py-1.5 text-right font-medium">Material</th>
@@ -381,13 +381,13 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
               </thead>
               <tbody>
                 {result.alternatives.map((alt, i) => (
-                  <tr key={i} className={`border-b border-slate-100 last:border-0 ${i === 0 ? "bg-orange-50 font-medium" : ""}`}>
+                  <tr key={i} className={`border-b border-slate-100 dark:border-slate-800 last:border-0 ${i === 0 ? "bg-orange-50 dark:bg-orange-950/40 font-medium" : ""}`}>
                     <td className="px-2 py-1">{alt.strategy}</td>
                     <td className="px-2 py-1 text-right tabular-nums">{alt.plates}</td>
                     <td className="px-2 py-1 text-right tabular-nums">{formatArea(alt.materialArea, unit)}</td>
                     <td className="px-2 py-1 text-right tabular-nums">{alt.overrun.toLocaleString()}</td>
                     {priced && (
-                      <td className="px-2 py-1 text-right tabular-nums text-slate-500">{formatPaise(alt.plateCost)}</td>
+                      <td className="px-2 py-1 text-right tabular-nums text-slate-500 dark:text-slate-400">{formatPaise(alt.plateCost)}</td>
                     )}
                     {priced && (
                       <td className="px-2 py-1 text-right tabular-nums">{formatPaise(alt.costPerThousand)}</td>

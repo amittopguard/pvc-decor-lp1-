@@ -5,16 +5,16 @@ import { formatArea, formatDistance, formatLength, formatPercent, getUnit } from
 
 function Stat({ label, value, sub, tone = "default" }) {
   const tones = {
-    default: "text-slate-900",
-    good: "text-emerald-600",
+    default: "text-slate-900 dark:text-slate-100",
+    good: "text-emerald-600 dark:text-emerald-400",
     warn: "text-orange-600",
-    bad: "text-red-600",
+    bad: "text-red-600 dark:text-red-400",
   };
   return (
-    <div className="border border-slate-200 bg-white px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
+    <div className="border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2">
+      <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
       <div className={`font-display text-xl font-semibold tabular-nums ${tones[tone]}`}>{value}</div>
-      {sub && <div className="text-xs text-slate-500">{sub}</div>}
+      {sub && <div className="text-xs text-slate-500 dark:text-slate-400">{sub}</div>}
     </div>
   );
 }
@@ -22,15 +22,15 @@ function Stat({ label, value, sub, tone = "default" }) {
 function Collapsible({ title, count, children, defaultOpen = false }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-slate-100">
+    <div className="border-t border-slate-100 dark:border-slate-800">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-slate-600 hover:bg-slate-50 print:hidden"
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 print:hidden"
       >
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         {title}
-        {count !== undefined && <span className="text-slate-400">({count})</span>}
+        {count !== undefined && <span className="text-slate-400 dark:text-slate-500">({count})</span>}
       </button>
       {open && <div className="px-3 pb-3">{children}</div>}
     </div>
@@ -49,23 +49,23 @@ function SheetCard({ sheet, total, unit, colorFor, options }) {
   });
 
   return (
-    <article className="border border-slate-200 bg-white print:break-inside-avoid print:border-slate-400">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-slate-200 bg-slate-50 px-3 py-2">
-        <h3 className="font-display text-sm font-semibold text-slate-900">
+    <article className="border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 print:break-inside-avoid print:border-slate-400">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2">
+        <h3 className="font-display text-sm font-semibold text-slate-900 dark:text-slate-100">
           Sheet {sheet.index} of {total}
-          <span className="ml-2 font-sans text-xs font-normal text-slate-500">
+          <span className="ml-2 font-sans text-xs font-normal text-slate-500 dark:text-slate-400">
             {sheet.label} — {formatLength(sheet.length, unit)} × {formatLength(sheet.width, unit)} {unit}
             {sheet.material ? ` — ${sheet.material}` : ""}
           </span>
         </h3>
-        <div className="flex items-center gap-3 text-xs text-slate-600">
+        <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400">
           <span>
-            <strong className="tabular-nums text-slate-900">{sheet.placements.length}</strong> parts
+            <strong className="tabular-nums text-slate-900 dark:text-slate-100">{sheet.placements.length}</strong> parts
           </span>
           <span>
-            <strong className="tabular-nums text-slate-900">{sheet.cutCount}</strong> cuts
+            <strong className="tabular-nums text-slate-900 dark:text-slate-100">{sheet.cutCount}</strong> cuts
           </span>
-          <span className={tone === "good" ? "text-emerald-600" : tone === "warn" ? "text-orange-600" : "text-red-600"}>
+          <span className={tone === "good" ? "text-emerald-600 dark:text-emerald-400" : tone === "warn" ? "text-orange-600" : "text-red-600 dark:text-red-400"}>
             <strong className="tabular-nums">{formatPercent(util)}</strong> used
           </span>
         </div>
@@ -78,7 +78,7 @@ function SheetCard({ sheet, total, unit, colorFor, options }) {
       <Collapsible title="Parts on this sheet" count={sheet.placements.length}>
         <table className="w-full text-xs">
           <thead>
-            <tr className="text-left text-slate-500">
+            <tr className="text-left text-slate-500 dark:text-slate-400">
               <th className="py-1 font-medium">Part</th>
               <th className="py-1 text-right font-medium">Size</th>
               <th className="py-1 text-right font-medium">Qty</th>
@@ -86,12 +86,12 @@ function SheetCard({ sheet, total, unit, colorFor, options }) {
           </thead>
           <tbody>
             {[...grouped.values()].map((g, i) => (
-              <tr key={i} className="border-t border-slate-100">
-                <td className="py-1 text-slate-800">{g.label || "—"}</td>
-                <td className="py-1 text-right tabular-nums text-slate-600">
+              <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
+                <td className="py-1 text-slate-800 dark:text-slate-200">{g.label || "—"}</td>
+                <td className="py-1 text-right tabular-nums text-slate-600 dark:text-slate-400">
                   {formatLength(g.w, unit)} × {formatLength(g.h, unit)}
                 </td>
-                <td className="py-1 text-right tabular-nums text-slate-800">{g.qty}</td>
+                <td className="py-1 text-right tabular-nums text-slate-800 dark:text-slate-200">{g.qty}</td>
               </tr>
             ))}
           </tbody>
@@ -99,16 +99,16 @@ function SheetCard({ sheet, total, unit, colorFor, options }) {
       </Collapsible>
 
       <Collapsible title="Cut sequence" count={sheet.cutCount}>
-        <ol className="space-y-0.5 text-xs text-slate-700">
+        <ol className="space-y-0.5 text-xs text-slate-700 dark:text-slate-300">
           {sheet.cuts.map((c, i) => (
             <li key={i} className="flex gap-2 tabular-nums">
-              <span className="w-6 shrink-0 text-slate-400">{i + 1}.</span>
+              <span className="w-6 shrink-0 text-slate-400 dark:text-slate-500">{i + 1}.</span>
               <span>
                 {c.dir === "v" ? "Vertical" : "Horizontal"} cut at{" "}
                 <strong>
                   {c.dir === "v" ? "x" : "y"} = {formatLength(c.pos, unit)} {unit}
                 </strong>{" "}
-                <span className="text-slate-500">
+                <span className="text-slate-500 dark:text-slate-400">
                   ({formatLength(c.length, unit)} {unit} long, from {formatLength(c.from, unit)} to{" "}
                   {formatLength(c.to, unit)})
                 </span>
@@ -119,9 +119,9 @@ function SheetCard({ sheet, total, unit, colorFor, options }) {
       </Collapsible>
 
       {sheet.largestOffcut && (
-        <div className="border-t border-slate-100 px-3 py-2 text-xs text-slate-500">
+        <div className="border-t border-slate-100 dark:border-slate-800 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
           Largest reusable offcut:{" "}
-          <strong className="tabular-nums text-slate-700">
+          <strong className="tabular-nums text-slate-700 dark:text-slate-300">
             {formatLength(sheet.largestOffcut.w, unit)} × {formatLength(sheet.largestOffcut.h, unit)} {unit}
           </strong>
         </div>
@@ -133,10 +133,10 @@ function SheetCard({ sheet, total, unit, colorFor, options }) {
 export default function ResultsPanel({ result, unit, colorFor, options, onOptionChange }) {
   if (!result) {
     return (
-      <div className="flex min-h-[320px] flex-col items-center justify-center border border-dashed border-slate-300 bg-white p-8 text-center">
-        <Scissors className="mb-3 h-8 w-8 text-slate-300" />
-        <p className="font-display text-base font-semibold text-slate-700">No layout yet</p>
-        <p className="mt-1 max-w-sm text-sm text-slate-500">
+      <div className="flex min-h-[320px] flex-col items-center justify-center border border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-8 text-center">
+        <Scissors className="mb-3 h-8 w-8 text-slate-300 dark:text-slate-600" />
+        <p className="font-display text-base font-semibold text-slate-700 dark:text-slate-300">No layout yet</p>
+        <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">
           Enter the parts you need and the sheets you have, then press Calculate. The optimiser tries dozens of packing
           strategies and keeps the one that wastes the least material.
         </p>
@@ -146,7 +146,7 @@ export default function ResultsPanel({ result, unit, colorFor, options, onOption
 
   if (!result.ok && !result.sheets.length) {
     return (
-      <div className="border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+      <div className="border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/40 p-4 text-sm text-red-700 dark:text-red-400">
         <AlertTriangle className="mb-2 h-5 w-5" />
         {result.error}
       </div>
@@ -158,7 +158,7 @@ export default function ResultsPanel({ result, unit, colorFor, options, onOption
   const unplacedTotal = result.unplaced.reduce((t, x) => t + x.qty, 0);
 
   const toggle = (key, label) => (
-    <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
+    <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
       <input
         type="checkbox"
         checked={!!options[key]}
@@ -191,7 +191,7 @@ export default function ResultsPanel({ result, unit, colorFor, options, onOption
       </div>
 
       {unplacedTotal > 0 && (
-        <div className="border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">
+        <div className="border border-orange-300 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/40 p-3 text-sm text-orange-900 dark:text-orange-200">
           <div className="mb-1 flex items-center gap-2 font-semibold">
             <AlertTriangle className="h-4 w-4" />
             {unplacedTotal} part{unplacedTotal === 1 ? "" : "s"} could not be placed
@@ -209,8 +209,8 @@ export default function ResultsPanel({ result, unit, colorFor, options, onOption
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-slate-200 bg-white px-3 py-2 print:hidden">
-        <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Diagram</span>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 print:hidden">
+        <span className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Diagram</span>
         {toggle("showLabels", "Labels")}
         {toggle("showDimensions", "Dimensions")}
         {toggle("showCuts", "Cut lines")}
@@ -230,25 +230,25 @@ export default function ResultsPanel({ result, unit, colorFor, options, onOption
         ))}
       </div>
 
-      <section className="border border-slate-200 bg-white print:break-inside-avoid">
-        <header className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-          <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-slate-900">Summary</h3>
+      <section className="border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 print:break-inside-avoid">
+        <header className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2">
+          <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-slate-900 dark:text-slate-100">Summary</h3>
         </header>
         <div className="grid gap-4 p-3 md:grid-cols-2">
           <div>
-            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Parts produced</h4>
+            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Parts produced</h4>
             <table className="w-full text-xs">
               <tbody>
                 {s.byPart.map((p) => (
-                  <tr key={p.rowId} className="border-t border-slate-100">
+                  <tr key={p.rowId} className="border-t border-slate-100 dark:border-slate-800">
                     <td className="py-1">
                       <span
-                        className="mr-2 inline-block h-2.5 w-2.5 border border-slate-300 align-middle"
+                        className="mr-2 inline-block h-2.5 w-2.5 border border-slate-300 dark:border-slate-600 align-middle"
                         style={{ background: colorFor(p.rowId) }}
                       />
                       {p.label || "—"}
                     </td>
-                    <td className="py-1 text-right tabular-nums text-slate-600">
+                    <td className="py-1 text-right tabular-nums text-slate-600 dark:text-slate-400">
                       {formatLength(p.length, unit)} × {formatLength(p.width, unit)}
                     </td>
                     <td className="py-1 text-right tabular-nums">{p.placed}</td>
@@ -258,13 +258,13 @@ export default function ResultsPanel({ result, unit, colorFor, options, onOption
             </table>
           </div>
           <div>
-            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Stock consumed</h4>
+            <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Stock consumed</h4>
             <table className="w-full text-xs">
               <tbody>
                 {s.byStock.map((st) => (
-                  <tr key={st.rowId} className="border-t border-slate-100">
+                  <tr key={st.rowId} className="border-t border-slate-100 dark:border-slate-800">
                     <td className="py-1">{st.label}</td>
-                    <td className="py-1 text-right tabular-nums text-slate-600">
+                    <td className="py-1 text-right tabular-nums text-slate-600 dark:text-slate-400">
                       {formatLength(st.length, unit)} × {formatLength(st.width, unit)}
                     </td>
                     <td className="py-1 text-right tabular-nums">{st.count} sheets</td>

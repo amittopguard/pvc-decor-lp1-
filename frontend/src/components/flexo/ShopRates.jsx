@@ -114,7 +114,7 @@ export default function ShopRates({ costing, onChange, store = null }) {
       title="Shop rates"
       subtitle="Turn these on to rank layouts by cost per thousand instead of material used"
       actions={
-        <label className="flex items-center gap-1.5 text-xs text-slate-600">
+        <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
           <CheckCell
             checked={costing.enabled !== false}
             onChange={(v) => set({ enabled: v })}
@@ -127,32 +127,32 @@ export default function ShopRates({ costing, onChange, store = null }) {
       <div className={`p-3 ${costing.enabled === false ? "pointer-events-none opacity-45" : ""}`}>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-700">Colours</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Colours</span>
             <NumberCell
               value={costing.colours}
               onChange={(v) => set({ colours: v })}
               aria-label="Colours in the job"
             />
-            <span className="text-[11px] text-slate-500">one plate each</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">one plate each</span>
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-700">Plate sets</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Plate sets</span>
             <NumberCell value={costing.sets} onChange={(v) => set({ sets: v })} aria-label="Plate sets" />
-            <span className="text-[11px] text-slate-500">1 unless the job needs more than one plate</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">1 unless the job needs more than one plate</span>
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-700">Plate rate (₹/cm²)</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Plate rate (₹/cm²)</span>
             <NumberCell
               value={costing.plateRatePerCm2}
               onChange={(v) => set({ plateRatePerCm2: v })}
               aria-label="Plate rate per square centimetre"
             />
-            <span className="text-[11px] text-slate-500">usually 1.2 to 1.4</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">usually 1.2 to 1.4</span>
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-700">Film</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Film</span>
             <select
-              className="w-full border border-slate-300 bg-white px-2 py-1 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
+              className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
               aria-label="Film material"
               value={film.material || "PVC"}
               onChange={(e) => setFilm({ material: e.target.value, density: FILM_DENSITY[e.target.value] })}
@@ -163,15 +163,15 @@ export default function ShopRates({ costing, onChange, store = null }) {
                 </option>
               ))}
             </select>
-            <span className="text-[11px] text-slate-500">density {film.density}</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">density {film.density}</span>
           </label>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-700">Priced</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Priced</span>
             <select
-              className="w-full border border-slate-300 bg-white px-2 py-1 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
+              className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
               aria-label="How the film is priced"
               value={film.mode}
               onChange={(e) => setFilm({ mode: e.target.value })}
@@ -179,11 +179,11 @@ export default function ShopRates({ costing, onChange, store = null }) {
               <option value="per_kg">Per kilo</option>
               <option value="per_sqm">Per square metre</option>
             </select>
-            <span className="text-[11px] text-slate-500">as the supplier bills it</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">as the supplier bills it</span>
           </label>
           {film.mode === "per_kg" ? (
             <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-slate-700">Rate (₹/kg)</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Rate (₹/kg)</span>
               <NumberCell
                 value={film.ratePerKg}
                 onChange={(v) => setFilm({ ratePerKg: v })}
@@ -192,7 +192,7 @@ export default function ShopRates({ costing, onChange, store = null }) {
             </label>
           ) : (
             <label className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-slate-700">Rate (₹/m²)</span>
+              <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Rate (₹/m²)</span>
               <NumberCell
                 value={film.ratePerSqm}
                 onChange={(v) => setFilm({ ratePerSqm: v })}
@@ -201,7 +201,7 @@ export default function ShopRates({ costing, onChange, store = null }) {
             </label>
           )}
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-700">Thickness (micron)</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Thickness (micron)</span>
             <NumberCell
               value={film.micron}
               onChange={(v) => setFilm({ micron: v })}
@@ -209,7 +209,7 @@ export default function ShopRates({ costing, onChange, store = null }) {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-700">Density (g/cm³)</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Density (g/cm³)</span>
             <NumberCell
               value={film.density}
               onChange={(v) => setFilm({ density: v, material: "" })}
@@ -218,7 +218,7 @@ export default function ShopRates({ costing, onChange, store = null }) {
           </label>
         </div>
 
-        <p className="mt-3 border-t border-slate-100 pt-2 text-xs text-slate-500">
+        <p className="mt-3 border-t border-slate-100 dark:border-slate-800 pt-2 text-xs text-slate-500 dark:text-slate-400">
           {film.micron} micron at {film.density} g/cm³ is <strong>{weight.toFixed(1)} gsm</strong> — one kilo yields{" "}
           {yieldPerKg.toFixed(2)} m², so this film costs <strong>{formatPaise(perSqm)} per m²</strong>.{" "}
           {film.mode === "per_kg"
@@ -227,8 +227,8 @@ export default function ShopRates({ costing, onChange, store = null }) {
         </p>
       </div>
 
-      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2">
-        <span className="text-xs text-slate-500">
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-2">
+        <span className="text-xs text-slate-500 dark:text-slate-400">
           {!shared ? (
             store?.signInHint || "These rates stay in this browser."
           ) : shop?.set ? (

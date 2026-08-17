@@ -67,7 +67,7 @@ export default function PartsTable({
         {/* The minimum width keeps the number cells legible; narrow screens scroll. */}
         <table className={`w-full border-collapse text-sm ${showMaterial ? "min-w-[660px]" : "min-w-[560px]"}`}>
           <thead>
-            <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+            <tr className="border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
               <th className="w-8 px-2 py-1.5" title="Include this row in the calculation">
                 <span className="sr-only">Enabled</span>
               </th>
@@ -88,7 +88,7 @@ export default function PartsTable({
               return (
                 <tr
                   key={p.id}
-                  className={`border-b border-slate-100 last:border-0 ${p.enabled === false ? "opacity-45" : ""}`}
+                  className={`border-b border-slate-100 dark:border-slate-800 last:border-0 ${p.enabled === false ? "opacity-45" : ""}`}
                 >
                   <td className="px-2 text-center">
                     <CheckCell
@@ -97,11 +97,11 @@ export default function PartsTable({
                       title="Include this part"
                     />
                   </td>
-                  <td className="border-l border-slate-100 p-0">
+                  <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                     <div className="flex items-center">
                       {dim && (
                         <span
-                          className="ml-2 inline-block h-3 w-3 shrink-0 border border-slate-300"
+                          className="ml-2 inline-block h-3 w-3 shrink-0 border border-slate-300 dark:border-slate-600"
                           style={{ background: colorFor(p.id) }}
                           aria-hidden="true"
                         />
@@ -118,7 +118,7 @@ export default function PartsTable({
                       />
                     </div>
                   </td>
-                  <td className="border-l border-slate-100 p-0">
+                  <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                     <NumberCell
                       value={p.width}
                       onChange={(v) => {
@@ -130,7 +130,7 @@ export default function PartsTable({
                       aria-label={`Part ${index + 1} width`}
                     />
                   </td>
-                  <td className="border-l border-slate-100 p-0">
+                  <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                     <NumberCell
                       value={p.qty}
                       onChange={(v) => update(p.id, { qty: v })}
@@ -138,7 +138,7 @@ export default function PartsTable({
                       aria-label={`Part ${index + 1} quantity`}
                     />
                   </td>
-                  <td className="border-l border-slate-100 p-0">
+                  <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                     <TextCell
                       value={p.label}
                       onChange={(v) => update(p.id, { label: v })}
@@ -147,7 +147,7 @@ export default function PartsTable({
                     />
                   </td>
                   {showMaterial && (
-                    <td className="border-l border-slate-100 p-0">
+                    <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                       <TextCell
                         value={p.material}
                         onChange={(v) => update(p.id, { material: v })}
@@ -156,7 +156,7 @@ export default function PartsTable({
                       />
                     </td>
                   )}
-                  <td className="border-l border-slate-100 px-1 text-center">
+                  <td className="border-l border-slate-100 dark:border-slate-800 px-1 text-center">
                     <IconButton
                       onClick={() => update(p.id, { canRotate: p.canRotate === false })}
                       title={
@@ -183,13 +183,13 @@ export default function PartsTable({
           </tbody>
         </table>
       </div>
-      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 text-xs text-slate-600 dark:text-slate-400">
         <span>
-          <strong className="tabular-nums text-slate-900">{totalPieces}</strong> pieces from{" "}
-          <strong className="tabular-nums text-slate-900">{filled.length}</strong> sizes
+          <strong className="tabular-nums text-slate-900 dark:text-slate-100">{totalPieces}</strong> pieces from{" "}
+          <strong className="tabular-nums text-slate-900 dark:text-slate-100">{filled.length}</strong> sizes
         </span>
         <span>
-          Total part area <strong className="tabular-nums text-slate-900">{formatArea(totalArea, unit)}</strong>
+          Total part area <strong className="tabular-nums text-slate-900 dark:text-slate-100">{formatArea(totalArea, unit)}</strong>
         </span>
       </footer>
     </Panel>

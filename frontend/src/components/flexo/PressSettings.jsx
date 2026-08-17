@@ -6,13 +6,13 @@ import { PITCHES, cylinderTeeth, getPitch } from "@/lib/flexo/layout";
 import { convert, formatLength, getUnit } from "@/lib/cutlist/units";
 
 const inputClass =
-  "w-full border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none " +
+  "w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1.5 text-sm text-slate-900 dark:text-slate-100 outline-none " +
   "focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30";
 
 function Field({ label, hint, children, className = "" }) {
   return (
     <label className={`flex flex-col gap-1 ${className}`}>
-      <span className="text-xs font-medium text-slate-700" title={hint}>
+      <span className="text-xs font-medium text-slate-700 dark:text-slate-300" title={hint}>
         {label}
       </span>
       {children}
@@ -97,10 +97,10 @@ export default function PressSettings({ press, unit, onChange, newWeb }) {
         </div>
 
         {(press.webMode || "range") === "list" && (
-          <div className="relative overflow-x-auto border-t border-slate-100">
+          <div className="relative overflow-x-auto border-t border-slate-100 dark:border-slate-800">
             <table className="w-full min-w-[320px] border-collapse text-sm">
               <thead>
-                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-slate-200 dark:border-slate-700 text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   <th className="w-8 px-2 py-1.5">
                     <span className="sr-only">Enabled</span>
                   </th>
@@ -111,14 +111,14 @@ export default function PressSettings({ press, unit, onChange, newWeb }) {
               </thead>
               <tbody>
                 {press.webs.map((w, i) => (
-                  <tr key={w.id} className={`border-b border-slate-100 last:border-0 ${w.enabled === false ? "opacity-45" : ""}`}>
+                  <tr key={w.id} className={`border-b border-slate-100 dark:border-slate-800 last:border-0 ${w.enabled === false ? "opacity-45" : ""}`}>
                     <td className="px-2 text-center">
                       <CheckCell checked={w.enabled !== false} onChange={(v) => updateWeb(w.id, { enabled: v })} title="Consider this web width" />
                     </td>
-                    <td className="border-l border-slate-100 p-0">
+                    <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                       <NumberCell value={w.width} onChange={(v) => updateWeb(w.id, { width: v })} placeholder="330" aria-label={`Web ${i + 1} width`} />
                     </td>
-                    <td className="border-l border-slate-100 p-0">
+                    <td className="border-l border-slate-100 dark:border-slate-800 p-0">
                       <TextCell value={w.label} onChange={(v) => updateWeb(w.id, { label: v })} placeholder="optional" aria-label={`Web ${i + 1} label`} />
                     </td>
                     <td className="px-1 text-right">
@@ -188,11 +188,11 @@ export default function PressSettings({ press, unit, onChange, newWeb }) {
             </select>
           </Field>
 
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             {teeth.length ? (
               <>
                 {teeth.length} cylinder{teeth.length === 1 ? "" : "s"} — repeat{" "}
-                <strong className="tabular-nums text-slate-700">
+                <strong className="tabular-nums text-slate-700 dark:text-slate-300">
                   {formatLength(repeatLo, unit)}
                   {teeth.length > 1 ? ` to ${formatLength(repeatHi, unit)}` : ""} {u.label}
                 </strong>
@@ -216,7 +216,7 @@ export default function PressSettings({ press, unit, onChange, newWeb }) {
             <input type="text" inputMode="decimal" className={inputClass} value={press.edgeMargin} onChange={decimal(press.edgeMargin, (v) => set({ edgeMargin: v }))} />
           </Field>
         </div>
-        <label className="flex cursor-pointer items-start gap-2 border-t border-slate-100 px-3 py-2">
+        <label className="flex cursor-pointer items-start gap-2 border-t border-slate-100 dark:border-slate-800 px-3 py-2">
           <input
             type="checkbox"
             checked={!!press.distributeAcross}
@@ -224,8 +224,8 @@ export default function PressSettings({ press, unit, onChange, newWeb }) {
             className="mt-0.5 h-4 w-4 cursor-pointer accent-orange-600"
           />
           <span>
-            <span className="block text-sm text-slate-800">Spread spare width into the gutters</span>
-            <span className="block text-xs text-slate-500">
+            <span className="block text-sm text-slate-800 dark:text-slate-200">Spread spare width into the gutters</span>
+            <span className="block text-xs text-slate-500 dark:text-slate-400">
               Off: leftover width stays at the edges as trim. On: lanes are spaced out to fill the web.
             </span>
           </span>
