@@ -130,11 +130,12 @@ export function widthOptions(minWidth, maxWidth, labelWidth, gutter, margin, dis
  * `plateTolerance` are then ordered by the smaller cylinder, since the smaller
  * plate is cheaper to make. The bucket keeps the comparison transitive.
  */
-function rankOptions(options, plateTolerance) {
+function rankOptions(options, plateTolerance, metric) {
   const tol = plateTolerance > 0 ? plateTolerance : DEFAULT_PLATE_TOLERANCE;
   const base = Math.log1p(tol);
   options.forEach((o) => {
-    o.costBucket = Math.round(Math.log(o.materialPerLabel) / base);
+    o.rankMetric = metric(o);
+    o.costBucket = Math.round(Math.log(o.rankMetric) / base);
   });
   options.sort(
     (a, b) =>
@@ -163,6 +164,7 @@ export function solveStepRepeat({
   pitch = 3.175,
   quantity = 0,
   plateTolerance = DEFAULT_PLATE_TOLERANCE,
+  cost = null,
   limit = 40,
 } = {}) {
   const labelW = num(label.width);
@@ -273,7 +275,24 @@ export function solveStepRepeat({
     };
   }
 
-  rankOptions(options, plateTolerance);
+  // Rupees beat square millimetres whenever we know what a plate costs. A wider
+  // web wastes less film, but every extra millimetre of width is plate area and
+  // plate area is bought once per colour. Below a few million labels the plate
+  // is the bigger number, so ranking on material alone picks the layout that
+  // uses the least film and costs the most to make.
+  let rankedBy = "material";
+  if (typeof cost === "function" && qty > 0) {
+    for (const o of options) Object.assign(o, cost(o) || {});
+    if (options.every((o) => Number.isFinite(o.costPerThousand) && o.costPerThousand > 0)) rankedBy = "cost";
+  }
+  rankOptions(options, plateTolerance, rankedBy === "cost" ? (o) => o.costPerThousand : (o) => o.materialPerLabel);
 
-  return { ok: true, errors: [], options: options.slice(0, limit), best: options[0], evaluated: options.length };
+  return {
+    ok: true,
+    errors: [],
+    rankedBy,
+    options: options.slice(0, limit),
+    best: options[0],
+    evaluated: options.length,
+  };
 }

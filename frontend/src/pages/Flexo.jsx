@@ -10,6 +10,8 @@ import ResultsPanel from "@/components/cutlist/ResultsPanel";
 import { colorForIndex } from "@/components/cutlist/SheetDiagram";
 import { CheckCell, IconButton, NumberCell, Panel, TextCell, ToolButton } from "@/components/cutlist/fields";
 import { Lock, Plus, RotateCw, Trash2 } from "lucide-react";
+import ShopRates, { DEFAULT_COSTING } from "@/components/flexo/ShopRates";
+import { layoutCostFn, formatPaise } from "@/lib/costing/costing";
 import { solveStepRepeat, getPitch } from "@/lib/flexo/layout";
 import { solvePlateSets } from "@/lib/flexo/plates";
 import { exportGangReport } from "@/lib/flexo/report";
@@ -46,6 +48,7 @@ const DEFAULT_PROJECT = () => ({
   tab: "repeat",
   label: { width: 100, height: 60, canRotate: true },
   quantity: 100000,
+  costing: DEFAULT_COSTING(),
   press: {
     webMode: "range",
     minWidth: 320,
@@ -166,7 +169,16 @@ export default function Flexo() {
   const [project, setProject] = useState(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) return { ...DEFAULT_PROJECT(), ...JSON.parse(raw) };
+      if (raw) {
+        const saved = JSON.parse(raw);
+        // Rates were added after the first release, so a saved project needs
+        // the defaults filled in under whatever it already had.
+        return {
+          ...DEFAULT_PROJECT(),
+          ...saved,
+          costing: { ...DEFAULT_COSTING(), ...(saved.costing || {}), film: { ...DEFAULT_COSTING().film, ...(saved.costing?.film || {}) } },
+        };
+      }
     } catch {
       /* storage unavailable — start fresh */
     }
@@ -230,6 +242,23 @@ export default function Flexo() {
     };
   }, [project.press, unit]);
 
+  /**
+   * The solver knows nothing about money — it is handed a pricing function and
+   * ranks on what comes back, so the unit conversion stays here where the unit
+   * is known.
+   */
+  const costFn = useCallback(() => {
+    const c = project.costing;
+    if (!c || c.enabled === false) return null;
+    return layoutCostFn({
+      unit,
+      colours: c.colours,
+      sets: c.sets,
+      quantity: project.quantity,
+      rates: { plateRatePerCm2: c.plateRatePerCm2, mountingPerPlate: 0, film: c.film },
+    });
+  }, [project.costing, project.quantity, unit]);
+
   const calculate = useCallback(async () => {
     setBusy(true);
     await new Promise((r) => setTimeout(r, 16));
@@ -240,11 +269,17 @@ export default function Flexo() {
           label: project.label,
           distributeAcross: project.press.distributeAcross,
           quantity: project.quantity,
+          cost: costFn(),
         });
         setRepeatResult(res);
         setSelectedRepeat(0);
-        if (res.ok) toast.success(`${res.best.across} × ${res.best.around} on a ${res.best.teeth}T cylinder`);
-        else toast.error(res.errors[0]);
+        if (res.ok) {
+          const b = res.best;
+          toast.success(
+            `${b.across} × ${b.around} on a ${b.teeth}T cylinder` +
+              (res.rankedBy === "cost" ? ` — ${formatPaise(b.costPerThousand)} per 1000` : "")
+          );
+        } else toast.error(res.errors[0]);
       } else if (tab === "gang") {
         const res = solvePlateSets({ ...pressArgs(), skus: project.skus });
         setGangResult(res);
@@ -272,7 +307,7 @@ export default function Flexo() {
     } finally {
       setBusy(false);
     }
-  }, [tab, pressArgs, project]);
+  }, [tab, pressArgs, costFn, project]);
 
   const exportReport = () => {
     if (!gangResult || !gangResult.ok) {
@@ -455,6 +490,7 @@ export default function Flexo() {
                 </label>
               </Panel>
               <PressSettings press={project.press} unit={unit} onChange={(press) => patch({ press })} newWeb={newWeb} />
+              <ShopRates costing={project.costing} onChange={(costing) => patch({ costing })} />
             </>
           )}
 

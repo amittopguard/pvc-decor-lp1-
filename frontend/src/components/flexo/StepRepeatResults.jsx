@@ -3,6 +3,7 @@ import { AlertTriangle, Layers } from "lucide-react";
 import WebDiagram from "./WebDiagram";
 import { colorForIndex } from "@/components/cutlist/SheetDiagram";
 import { formatArea, formatLength, formatPercent, getUnit } from "@/lib/cutlist/units";
+import { formatPaise } from "@/lib/costing/costing";
 
 function Stat({ label, value, sub, tone = "default" }) {
   const tones = { default: "text-slate-900", good: "text-emerald-600", warn: "text-orange-600", bad: "text-red-600" };
@@ -69,11 +70,15 @@ export default function StepRepeatResults({ result, unit, margin, selected, onSe
   const option = result.options[selected] || result.best;
   const rects = stepRepeatRects(option, margin);
   const best = result.best;
-  const penalty = option.materialPerLabel / best.materialPerLabel - 1;
+  // "vs best" has to be measured on whatever the ranking used, or the table
+  // contradicts its own ordering.
+  const priced = result.rankedBy === "cost";
+  const metric = (o) => (priced ? o.costPerThousand : o.materialPerLabel);
+  const penalty = metric(option) / metric(best) - 1;
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${priced ? "xl:grid-cols-7" : "xl:grid-cols-6"}`}>
         <Stat label="Layout" value={`${option.across} × ${option.around}`} sub={`${option.perRev} labels per turn`} />
         <Stat
           label="Cylinder"
@@ -86,10 +91,18 @@ export default function StepRepeatResults({ result, unit, margin, selected, onSe
           tone={option.utilisation > 0.8 ? "good" : option.utilisation > 0.65 ? "warn" : "bad"}
           sub={`${formatLength(option.edgeWaste, unit)} ${u.label} trim`}
         />
+        {priced && (
+          <Stat
+            label="Per 1000"
+            value={formatPaise(option.costPerThousand)}
+            sub={`${formatPaise(option.platePerThousand)} plates + ${formatPaise(option.materialPerThousand)} film`}
+            tone={penalty > 0.02 ? "warn" : "good"}
+          />
+        )}
         <Stat
           label="Per label"
           value={`${formatLength(option.materialPerLabel / 100, unit)} cm²`}
-          sub={penalty > 0.0001 ? `${formatPercent(penalty, 1)} above best` : "cheapest option"}
+          sub={penalty > 0.0001 ? `${formatPercent(penalty, 1)} above best` : priced ? "cheapest option" : "least material"}
           tone={penalty > 0.02 ? "warn" : "good"}
         />
         <Stat
@@ -148,7 +161,8 @@ export default function StepRepeatResults({ result, unit, margin, selected, onSe
           <h3 className="font-display text-sm font-semibold uppercase tracking-wide text-slate-900">
             Alternatives
             <span className="ml-2 font-sans text-xs font-normal normal-case text-slate-500">
-              {result.evaluated} layouts evaluated — click a row to preview
+              {result.evaluated} layouts evaluated, ranked by{" "}
+              {priced ? "cost per thousand labels" : "material per label"} — click a row to preview
             </span>
           </h3>
         </header>
@@ -163,12 +177,14 @@ export default function StepRepeatResults({ result, unit, margin, selected, onSe
                 <th className="px-2 py-1.5 text-right font-medium">Per turn</th>
                 <th className="px-2 py-1.5 text-right font-medium">Used</th>
                 <th className="px-2 py-1.5 text-right font-medium">Trim</th>
+                {priced && <th className="px-2 py-1.5 text-right font-medium">Plates</th>}
+                {priced && <th className="px-2 py-1.5 text-right font-medium">₹/1000</th>}
                 <th className="px-2 py-1.5 text-right font-medium">vs best</th>
               </tr>
             </thead>
             <tbody>
               {result.options.map((o, i) => {
-                const delta = o.materialPerLabel / best.materialPerLabel - 1;
+                const delta = metric(o) / metric(best) - 1;
                 return (
                   <tr
                     key={o.id}
@@ -187,6 +203,12 @@ export default function StepRepeatResults({ result, unit, margin, selected, onSe
                     <td className="px-2 py-1 text-right tabular-nums">{o.perRev}</td>
                     <td className="px-2 py-1 text-right tabular-nums">{formatPercent(o.utilisation)}</td>
                     <td className="px-2 py-1 text-right tabular-nums">{formatLength(o.edgeWaste, unit)}</td>
+                    {priced && (
+                      <td className="px-2 py-1 text-right tabular-nums text-slate-500">
+                        {formatPaise(o.plateCost)}
+                      </td>
+                    )}
+                    {priced && <td className="px-2 py-1 text-right tabular-nums">{formatPaise(o.costPerThousand)}</td>}
                     <td className={`px-2 py-1 text-right tabular-nums ${delta > 0.02 ? "text-red-600" : delta > 0.0001 ? "text-orange-600" : "text-emerald-600"}`}>
                       {delta < 0.0001 ? "best" : `+${(delta * 100).toFixed(1)}%`}
                     </td>
@@ -203,6 +225,15 @@ export default function StepRepeatResults({ result, unit, margin, selected, onSe
           For {quantity.toLocaleString()} labels this layout runs {option.revolutions.toLocaleString()} turns —{" "}
           {formatLength(option.webLength, unit)} {u.label} of web, {formatArea(option.materialArea, unit)} of material,
           with {option.overrun.toLocaleString()} labels over.
+          {priced && (
+            <>
+              {" "}
+              {option.plateCount} plate{option.plateCount === 1 ? "" : "s"} of{" "}
+              {option.plateAreaCm2.toFixed(0)} cm² cost {formatPaise(option.plateCost)} and the film{" "}
+              {formatPaise(option.materialCost)} — {formatPaise(option.totalCost)} in all. The plates are a one-off, so
+              the longer the run the less they matter.
+            </>
+          )}
         </p>
       )}
     </div>

@@ -156,6 +156,38 @@ export function jobCost({
 }
 
 /**
+ * A pricing function for the step-and-repeat solver.
+ *
+ * The solver stays free of any costing knowledge and simply calls whatever it
+ * is handed, which keeps the unit conversion here where the unit is already
+ * known. Give the result to `solveStepRepeat({ cost })` and it ranks layouts by
+ * rupees per thousand instead of material per label.
+ */
+export function layoutCostFn({ unit = "mm", colours = 1, sets = 1, quantity = 0, rates = DEFAULT_RATES } = {}) {
+  const perSqm = filmCostPerSqm(rates.film);
+  const qty = Math.max(0, Math.floor(num(quantity)));
+  return (option) => {
+    // The plate wraps the cylinder, so it is one repeat long and one web wide.
+    const plateAreaCm2 = toSquareCm(num(option.repeat) * num(option.webWidth), unit);
+    const plates = plateCost({ areaCm2: plateAreaCm2, colours, sets, rates });
+    const materialSqm = toSquareMetres(num(option.materialArea), unit);
+    const materialCost = materialSqm * perSqm;
+    const total = plates.total + materialCost;
+    return {
+      plateAreaCm2,
+      plateCount: plates.plateCount,
+      plateCost: plates.total,
+      materialSqm,
+      materialCost,
+      totalCost: total,
+      costPerThousand: qty > 0 ? (total / qty) * 1000 : 0,
+      platePerThousand: qty > 0 ? (plates.total / qty) * 1000 : 0,
+      materialPerThousand: qty > 0 ? (materialCost / qty) * 1000 : 0,
+    };
+  };
+}
+
+/**
  * Where a layout that costs more in plates but less in film overtakes one that
  * is cheaper to tool up. Returns the quantity at which they cost the same.
  *

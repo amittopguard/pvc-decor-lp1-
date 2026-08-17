@@ -14,7 +14,7 @@ function load() {
   const sandbox = { module: { exports: {} }, console };
   vm.createContext(sandbox);
   vm.runInContext(
-    `${code}\nmodule.exports = { gsm, sqmPerKg, filmCostPerSqm, filmCostPerKg, plateCost, jobCost, breakEven, toSquareMetres, toSquareCm, DEFAULT_RATES, FILM_DENSITY };`,
+    `${code}\nmodule.exports = { gsm, sqmPerKg, filmCostPerSqm, filmCostPerKg, plateCost, jobCost, breakEven, layoutCostFn, toSquareMetres, toSquareCm, DEFAULT_RATES, FILM_DENSITY };`,
     sandbox,
     { filename: "costing.js" }
   );
@@ -167,6 +167,49 @@ section("7. Defaults match the quoted rates");
   check("film defaults to per kilo, the common case", C.DEFAULT_RATES.film.mode === "per_kg");
   check("PVC density is on file at 1.4", near(C.FILM_DENSITY.PVC, 1.4));
   check("and the default film uses it", near(C.DEFAULT_RATES.film.density, 1.4));
+}
+
+section("8. Pricing a step-and-repeat layout");
+{
+  const rates = {
+    ...C.DEFAULT_RATES,
+    plateRatePerCm2: 1.3,
+    mountingPerPlate: 0,
+    film: { mode: "per_kg", ratePerKg: 220, micron: 50, density: 1.4 },
+  };
+  // The solver's own numbers: a 322 mm web on a 65-tooth cylinder, 10 up.
+  const option = { repeat: 206.375, webWidth: 322, materialArea: 10000 * 206.375 * 322 };
+  const price = C.layoutCostFn({ unit: "mm", colours: 4, sets: 1, quantity: 100000, rates });
+  const p = price(option);
+
+  check("the plate is one repeat by one web", near(p.plateAreaCm2, (206.375 * 322) / 100, 1e-6), `${p.plateAreaCm2}`);
+  check("four colours is four plates", p.plateCount === 4);
+  check("plate cost is area × rate × plates", near(p.plateCost, p.plateAreaCm2 * 1.3 * 4, 1e-6), `${p.plateCost}`);
+  check("film is charged on the web actually run", near(p.materialSqm, option.materialArea / 1e6, 1e-9));
+  check("total is plates plus film", near(p.totalCost, p.plateCost + p.materialCost, 1e-9));
+  check(
+    "per thousand splits into plate and film",
+    near(p.costPerThousand, p.platePerThousand + p.materialPerThousand, 1e-9),
+    `${p.costPerThousand}`
+  );
+
+  // Plates are a one-off, so ten times the run cannot cost ten times as much.
+  const long = C.layoutCostFn({ unit: "mm", colours: 4, quantity: 1000000, rates })({
+    ...option,
+    materialArea: option.materialArea * 10,
+  });
+  check("ten times the run is cheaper per thousand", long.costPerThousand < p.costPerThousand);
+  check("because the plate bill did not change", near(long.plateCost, p.plateCost, 1e-9));
+
+  // The same layout in inches must price the same as in millimetres.
+  const inch = C.layoutCostFn({ unit: "in", colours: 4, quantity: 100000, rates })({
+    repeat: 206.375 / 25.4,
+    webWidth: 322 / 25.4,
+    materialArea: option.materialArea / (25.4 * 25.4),
+  });
+  check("the unit does not change the price", near(inch.costPerThousand, p.costPerThousand, 1e-6), `${inch.costPerThousand}`);
+
+  check("a zero quantity gives no per-thousand figure", C.layoutCostFn({ quantity: 0, rates })(option).costPerThousand === 0);
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`);

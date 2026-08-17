@@ -486,5 +486,105 @@ section("15. Gang run against the width range");
   );
 }
 
+section("Ranking by rupees rather than square millimetres");
+{
+  // The same pricing the app supplies, written out here so the layout engine
+  // stays free of any costing import.
+  const priceWith = (quantity, colours, plateRate = 1.3, filmPerSqm = 15.4) => (o) => {
+    const plateCost = ((o.repeat * o.webWidth) / 100) * plateRate * colours;
+    const materialCost = (o.materialArea / 1e6) * filmPerSqm;
+    const totalCost = plateCost + materialCost;
+    return { plateCost, materialCost, totalCost, costPerThousand: (totalCost / quantity) * 1000 };
+  };
+
+  const job = {
+    label: { width: 100, height: 60, canRotate: true },
+    webRange: { min: 320, max: 650 },
+    cylinders: { minTeeth: 60, maxTeeth: 200 },
+    gapAcross: 3,
+    gapAround: 3,
+    edgeMargin: 5,
+    pitch: 3.175,
+  };
+
+  const unpriced = solveStepRepeat({ ...job, quantity: 100000 });
+  check("without rates it still ranks on material", unpriced.rankedBy === "material", unpriced.rankedBy);
+  check("and every option carries no price", unpriced.best.costPerThousand === undefined);
+
+  const priced = solveStepRepeat({ ...job, quantity: 100000, cost: priceWith(100000, 4) });
+  check("with rates it ranks on cost", priced.rankedBy === "cost", priced.rankedBy);
+  check("the best option is priced", priced.best.costPerThousand > 0, `${priced.best.costPerThousand}`);
+  // Layouts within the plate tolerance of each other share a bucket and break
+  // ties to the smaller cylinder, so cost rises by bucket rather than by row.
+  check(
+    "cost rises bucket by bucket",
+    priced.options.every((o, i) => i === 0 || o.costBucket >= priced.options[i - 1].costBucket),
+    priced.options.slice(0, 6).map((o) => `${o.costBucket}:${o.costPerThousand.toFixed(2)}`).join(", ")
+  );
+  check(
+    "and inside a bucket the smaller cylinder comes first",
+    priced.options.every(
+      (o, i) => i === 0 || o.costBucket !== priced.options[i - 1].costBucket || o.repeat >= priced.options[i - 1].repeat
+    )
+  );
+
+  // The point of the whole change: the cheapest layout is not the one that uses
+  // the least film, because the plate is bought by the square centimetre.
+  const leanest = unpriced.best;
+  const plateArea = (o) => (o.repeat * o.webWidth) / 100;
+  check(
+    "the tightest layout is not the cheapest at 100k",
+    leanest.id !== priced.best.id,
+    `${leanest.id} vs ${priced.best.id}`
+  );
+  check(
+    "the cheapest uses a narrower web",
+    priced.best.webWidth < leanest.webWidth,
+    `${priced.best.webWidth} vs ${leanest.webWidth}`
+  );
+  check(
+    "which is exactly the plate being smaller",
+    plateArea(priced.best) < plateArea(leanest),
+    `${plateArea(priced.best).toFixed(0)} vs ${plateArea(leanest).toFixed(0)} cm2`
+  );
+  check(
+    "and it pays for that with more film per label",
+    priced.best.materialPerLabel > leanest.materialPerLabel,
+    `${priced.best.materialPerLabel.toFixed(2)} vs ${leanest.materialPerLabel.toFixed(2)}`
+  );
+
+  // Run it long enough and the plate stops mattering, so the tighter layout wins.
+  const huge = 50000000;
+  const long = solveStepRepeat({ ...job, quantity: huge, cost: priceWith(huge, 4) });
+  check(
+    "over a very long run the choice swings back to the tighter layout",
+    long.best.materialPerLabel < priced.best.materialPerLabel,
+    `${long.best.materialPerLabel.toFixed(2)} vs ${priced.best.materialPerLabel.toFixed(2)}`
+  );
+  check(
+    "on a wider web",
+    long.best.webWidth > priced.best.webWidth,
+    `${long.best.webWidth} vs ${priced.best.webWidth}`
+  );
+
+  // More colours means more plates, which pushes the answer narrower still.
+  const oneColour = solveStepRepeat({ ...job, quantity: 100000, cost: priceWith(100000, 1) });
+  const eight = solveStepRepeat({ ...job, quantity: 100000, cost: priceWith(100000, 8) });
+  check(
+    "eight colours never picks a wider web than one",
+    eight.best.webWidth <= oneColour.best.webWidth,
+    `${eight.best.webWidth} vs ${oneColour.best.webWidth}`
+  );
+
+  check(
+    "a zero quantity falls back to material, not a divide by zero",
+    solveStepRepeat({ ...job, quantity: 0, cost: priceWith(1, 4) }).rankedBy === "material"
+  );
+  check(
+    "a pricing function that returns nothing is ignored",
+    solveStepRepeat({ ...job, quantity: 100000, cost: () => null }).rankedBy === "material"
+  );
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`);
 process.exit(failures === 0 ? 0 : 1);

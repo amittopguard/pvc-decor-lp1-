@@ -112,6 +112,44 @@ const check = (name, ok, detail) => {
   const after = await page.$eval("svg[role='img']", (e) => e.outerHTML.length);
   check("clicking an alternative previews it", before !== after, "diagram did not change");
 
+  console.log("\nRanked by rupees, not square millimetres");
+  let main = await page.locator("main").innerText();
+  check("with rates on, the ranking is by cost", /ranked by cost per thousand/i.test(main), main.slice(0, 200));
+  check("cost per thousand is shown", /PER 1000[\s\S]{0,20}₹/i.test(main), main.slice(0, 300));
+  check(
+    "and split into plates and film",
+    /₹[\d,.]+ plates \+ ₹[\d,.]+ film/.test(main),
+    main.slice(0, 400)
+  );
+  const cheapWeb = await page.$$eval(".font-display.text-xl", (e) => e.map((x) => x.textContent));
+
+  // More colours means more plates, and a bigger plate bill pushes the answer
+  // to a narrower web. This is the whole reason the ranking changed.
+  await page.locator("[aria-label='Colours in the job']").fill("8");
+  await tap("button:has-text('Calculate')");
+  await page.waitForTimeout(900);
+  await hideToasts();
+  const eightWeb = await page.$$eval(".font-display.text-xl", (e) => e.map((x) => x.textContent));
+  const widthOf = (stats) => parseFloat((stats.find((s) => /mm$/.test(s)) || "0").replace(/[^\d.]/g, ""));
+  check(
+    "eight colours never widens the web against four",
+    widthOf(eightWeb) <= widthOf(cheapWeb),
+    `${widthOf(eightWeb)} vs ${widthOf(cheapWeb)}`
+  );
+  await page.locator("[aria-label='Colours in the job']").fill("4");
+
+  // Turning the rates off must fall back to the material ranking, not break.
+  await page.locator("input[title='Rank layouts by cost']").dispatchEvent("click");
+  await page.waitForTimeout(200);
+  await tap("button:has-text('Calculate')");
+  await page.waitForTimeout(900);
+  await hideToasts();
+  main = await page.locator("main").innerText();
+  check("switching rates off ranks by material again", /ranked by material per label/i.test(main), main.slice(0, 200));
+  await page.locator("input[title='Rank layouts by cost']").dispatchEvent("click");
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: path.join(SHOTS, "flexo-rates.png"), fullPage: true });
+
   console.log("\nGang run");
   await tap("button:has-text('Gang run')");
   await page.waitForTimeout(200);
