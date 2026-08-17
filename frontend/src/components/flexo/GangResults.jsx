@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight, Rows3 } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, GripVertical, RotateCcw, Rows3, X } from "lucide-react";
 import WebDiagram from "./WebDiagram";
 import { colorForIndex } from "@/components/cutlist/SheetDiagram";
 import { formatArea, formatLength, formatPercent, getUnit } from "@/lib/cutlist/units";
@@ -42,14 +42,31 @@ export function gangRects(plan, margin, gapAcross, colorOf) {
   return rects;
 }
 
-function PlateCard({ plate, total, unit, margin, gapAcross, colorOf }) {
+function PlateCard({ plate, total, unit, margin, gapAcross, colorOf, move, dragging, setDragging }) {
   const [showOptions, setShowOptions] = useState(false);
+  const [dropping, setDropping] = useState(false);
   const plan = plate.plan;
   const u = getUnit(unit);
   const rects = gangRects(plan, margin, gapAcross, colorOf);
 
   return (
-    <article className="border border-slate-200 bg-white print:break-inside-avoid">
+    <article
+      className={`border bg-white transition-colors print:break-inside-avoid ${
+        dropping ? "border-orange-500 ring-2 ring-orange-500/30" : "border-slate-200"
+      }`}
+      onDragOver={move ? (e) => { e.preventDefault(); setDropping(true); } : undefined}
+      onDragLeave={move ? () => setDropping(false) : undefined}
+      onDrop={
+        move
+          ? (e) => {
+              e.preventDefault();
+              setDropping(false);
+              const id = e.dataTransfer.getData("text/plain");
+              if (id) move(id, plate.index);
+            }
+          : undefined
+      }
+    >
       <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-slate-200 bg-slate-50 px-3 py-2">
         <h3 className="font-display text-sm font-semibold text-slate-900">
           Plate {plate.index} of {total}
@@ -91,8 +108,17 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf }) {
           </thead>
           <tbody>
             {plan.lanes.map((l) => (
-              <tr key={l.id} className="border-b border-slate-100 last:border-0">
+              <tr
+                key={l.id}
+                draggable={!!move}
+                onDragStart={move ? (e) => { e.dataTransfer.setData("text/plain", l.id); setDragging(l.id); } : undefined}
+                onDragEnd={move ? () => setDragging(null) : undefined}
+                className={`border-b border-slate-100 last:border-0 ${
+                  move ? "cursor-grab active:cursor-grabbing hover:bg-orange-50/60" : ""
+                } ${dragging === l.id ? "opacity-40" : ""}`}
+              >
                 <td className="px-2 py-1">
+                  {move && <GripVertical className="mr-1 inline h-3 w-3 align-middle text-slate-300 print:hidden" />}
                   <span
                     className="mr-2 inline-block h-2.5 w-2.5 border border-slate-300 align-middle"
                     style={{ background: colorOf(l.id) }}
@@ -102,6 +128,17 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf }) {
                     <span className="ml-1 text-orange-600" title="Turned 90°">
                       ↻
                     </span>
+                  )}
+                  {move && (
+                    <button
+                      type="button"
+                      onClick={() => move(l.id, null)}
+                      title={`Take ${l.name} off this run`}
+                      aria-label={`Take ${l.name} off this run`}
+                      className="ml-1.5 align-middle text-slate-300 hover:text-red-600 print:hidden"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   )}
                 </td>
                 <td className="px-2 py-1 text-right tabular-nums">{l.lanes}</td>
@@ -165,7 +202,8 @@ function PlateCard({ plate, total, unit, margin, gapAcross, colorOf }) {
   );
 }
 
-export default function GangResults({ result, unit, margin, gapAcross, colorOf }) {
+export default function GangResults({ result, unit, margin, gapAcross, colorOf, onMove, onReset }) {
+  const [dragging, setDragging] = useState(null);
   if (!result) {
     return (
       <div className="flex min-h-[320px] flex-col items-center justify-center border border-dashed border-slate-300 bg-white p-8 text-center">
@@ -228,7 +266,23 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf }
         <Stat label="Grouped by" value={result.plates.length > 1 ? "split" : "one plate"} sub={result.strategy} />
       </div>
 
-      {t.plates > 1 && (
+      {result.manual && onReset && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border border-slate-300 bg-slate-50 px-3 py-2 text-xs print:hidden">
+          <span className="text-slate-600">
+            You moved these SKUs yourself, so the planner is not choosing the grouping any more. Each plate is
+            still solved properly.
+          </span>
+          <button
+            type="button"
+            onClick={onReset}
+            className="inline-flex items-center gap-1.5 border border-slate-300 bg-white px-2 py-1 text-slate-700 hover:border-orange-500"
+          >
+            <RotateCcw className="h-3.5 w-3.5" /> Back to the planner's split
+          </button>
+        </div>
+      )}
+
+      {t.plates > 1 && !result.manual && (
         <div className="border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">
           <div className="mb-1 flex items-center gap-2 font-semibold">
             <AlertTriangle className="h-4 w-4" />
@@ -267,6 +321,13 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf }
         </div>
       )}
 
+      {onMove && (
+        <p className="px-1 text-xs text-slate-500 print:hidden">
+          Drag a SKU onto another plate to move it, or × to take it off the run. The plate it lands on is worked
+          out again from scratch — the grouping is yours, the layout is still solved.
+        </p>
+      )}
+
       {result.plates.map((plate) => (
         <PlateCard
           key={plate.index}
@@ -276,8 +337,25 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf }
           margin={margin}
           gapAcross={gapAcross}
           colorOf={colorOf}
+          move={onMove}
+          dragging={dragging}
+          setDragging={setDragging}
         />
       ))}
+
+      {onMove && dragging && (
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const id = e.dataTransfer.getData("text/plain");
+            if (id) onMove(id, "new");
+          }}
+          className="border-2 border-dashed border-orange-400 bg-orange-50/60 p-4 text-center text-xs text-orange-800 print:hidden"
+        >
+          Drop here to give it a plate of its own
+        </div>
+      )}
 
       {result.alternatives && result.alternatives.length > 1 && (
         <section className="border border-slate-200 bg-white print:hidden">

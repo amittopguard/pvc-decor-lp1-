@@ -79,6 +79,91 @@ export function diagnoseSplit(list, { gutter, margin, widest, teethList, pitch }
   };
 }
 
+
+/**
+ * Solve a grouping somebody chose, rather than one this module worked out.
+ *
+ * The planner picks how the SKUs share plates, and most of the time that is
+ * what you want. But a planner cannot know that two labels belong to the same
+ * job, or that a customer wants one on its own — so when the grouping is moved
+ * by hand, each plate is still solved properly here; only the choice of which
+ * SKUs share a plate is taken away from it.
+ *
+ * `groups` is an array of arrays of SKU ids. Returns the same shape as
+ * solvePlateSets, or ok:false naming the plate that will not fit.
+ */
+export function solveGroups({ groups = [], skus = [], cost = null, ...args } = {}) {
+  const byId = new Map((skus || []).map((s) => [String(s.id), s]));
+  const resolved = groups
+    .map((ids) => ids.map((id) => byId.get(String(id))).filter(Boolean))
+    .filter((g) => g.length);
+
+  if (!resolved.length) {
+    return { ok: false, errors: ["Every plate is empty."], plates: [], totals: null };
+  }
+
+  const solved = [];
+  for (let i = 0; i < resolved.length; i++) {
+    const res = solveGang({ ...args, skus: resolved[i], minSkus: 1, timeBudgetMs: 2000 });
+    if (!res.ok || !res.best) {
+      const names = resolved[i].map((s) => s.name || s.id).join(", ");
+      return {
+        ok: false,
+        errors: [`Plate ${i + 1} will not fit as ${names}. ${res.errors?.[0] || ""}`.trim()],
+        plates: [],
+        totals: null,
+      };
+    }
+    solved.push(res);
+  }
+
+  const flat = resolved.flat();
+  const ordered = flat.reduce((s, x) => s + Math.floor(num(x.qty)), 0);
+  const printed = solved.reduce((s, r) => s + r.best.lanes.reduce((t, l) => t + l.printed, 0), 0);
+  const materialArea = solved.reduce((s, r) => s + r.best.materialArea, 0);
+  const overrun = solved.reduce((s, r) => s + r.best.totalOverrun, 0);
+  const webLength = solved.reduce((s, r) => s + r.best.webLength, 0);
+
+  const priced = typeof cost === "function" ? solved.map((r) => cost(r.best) || {}) : null;
+  const plateCost = priced ? priced.reduce((s, p) => s + (p.plateCost || 0), 0) : null;
+  const materialCost = priced ? priced.reduce((s, p) => s + (p.materialCost || 0), 0) : null;
+  const totalCost = priced ? plateCost + materialCost : null;
+
+  return {
+    ok: true,
+    errors: [],
+    rankedBy: priced ? "cost" : "plates",
+    // Nothing was ranked — this grouping was chosen, not found.
+    strategy: "moved by hand",
+    manual: true,
+    split: null,
+    plates: solved.map((res, i) => ({
+      index: i + 1,
+      plan: res.best,
+      options: res.options,
+      skuCount: res.best.lanes.length,
+      cost: priced ? priced[i] : null,
+    })),
+    totals: {
+      plates: solved.length,
+      skus: flat.length,
+      ordered,
+      printed,
+      overrun,
+      overrunPct: ordered > 0 ? overrun / ordered : 0,
+      materialArea,
+      webLength: round(webLength, 2),
+      revolutions: solved.reduce((s, r) => s + r.best.revolutions, 0),
+      plateCost,
+      materialCost,
+      totalCost,
+      costPerThousand: priced && ordered > 0 ? (totalCost / ordered) * 1000 : null,
+    },
+    alternatives: [],
+    elapsedMs: 0,
+  };
+}
+
 /** Greedily fill plates in the given order, opening a new one when full. */
 function greedyPartition(order, capacityWidth, gutter, margin, maxPerPlate) {
   const groups = [];

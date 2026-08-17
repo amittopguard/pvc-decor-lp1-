@@ -16,7 +16,7 @@ import { errorText, getLayout, getShopRates, hasToken, putShopRates } from "@/li
 
 import { layoutCostFn, formatPaise } from "@/lib/costing/costing";
 import { solveStepRepeat, getPitch } from "@/lib/flexo/layout";
-import { solvePlateSets } from "@/lib/flexo/plates";
+import { solveGroups, solvePlateSets } from "@/lib/flexo/plates";
 import { exportGangReport } from "@/lib/flexo/report";
 import { optimize } from "@/lib/cutlist/optimizer";
 import { convert, getUnit } from "@/lib/cutlist/units";
@@ -209,6 +209,9 @@ export default function Flexo() {
   const [plateResult, setPlateResult] = useState(null);
   const [selectedRepeat, setSelectedRepeat] = useState(0);
   const [selectedGang, setSelectedGang] = useState(0);
+  // A grouping moved by hand, as arrays of SKU ids. Null while the planner is
+  // choosing, which is the normal state.
+  const [manualGroups, setManualGroups] = useState(null);
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState({ showLabels: true, showDimensions: true, showCuts: false, showOffcuts: true });
 
@@ -450,7 +453,8 @@ export default function Flexo() {
           );
         } else toast.error(res.errors[0]);
       } else if (tab === "gang") {
-        const res = solvePlateSets({ ...pressArgs(), skus: project.skus, cost: costFn() });
+        const args = { ...pressArgs(), skus: project.skus, cost: costFn() };
+        const res = manualGroups ? solveGroups({ ...args, groups: manualGroups }) : solvePlateSets(args);
         setGangResult(res);
         setSelectedGang(0);
         if (res.ok) {
@@ -479,7 +483,55 @@ export default function Flexo() {
     } finally {
       setBusy(false);
     }
-  }, [tab, pressArgs, costFn, project]);
+  }, [tab, pressArgs, costFn, manualGroups, project]);
+
+  /**
+   * Move a SKU to another plate, to its own, or off the run.
+   *
+   * The grouping becomes the operator's; the layout stays the engine's — the
+   * plates either side of the move are solved again from scratch. A move that
+   * will not fit is refused with the reason rather than quietly dropping the
+   * SKU somewhere it does not belong.
+   */
+  const moveSku = useCallback(
+    (skuId, target) => {
+      const current =
+        manualGroups ||
+        (gangResult?.ok ? gangResult.plates.map((p) => p.plan.lanes.map((l) => String(l.id))) : null);
+      if (!current) return;
+
+      const without = current.map((g) => g.filter((id) => id !== String(skuId)));
+      let next;
+      if (target === null) {
+        next = without; // off the run entirely
+      } else if (target === "new") {
+        next = [...without, [String(skuId)]];
+      } else {
+        const i = target - 1;
+        if (!without[i]) return;
+        if (current[i]?.includes(String(skuId))) return; // already there
+        next = without.map((g, idx) => (idx === i ? [...g, String(skuId)] : g));
+      }
+      next = next.filter((g) => g.length);
+      if (!next.length) {
+        toast.error("That would leave nothing to print.");
+        return;
+      }
+
+      const trial = solveGroups({ ...pressArgs(), skus: project.skus, cost: costFn(), groups: next });
+      if (!trial.ok) {
+        toast.error(trial.errors[0]);
+        return;
+      }
+      setManualGroups(next);
+      setGangResult(trial);
+      setSelectedGang(0);
+      toast.success(
+        target === null ? "Taken off the run." : `Now ${trial.totals.plates} plate${trial.totals.plates === 1 ? "" : "s"}.`
+      );
+    },
+    [manualGroups, gangResult, pressArgs, project.skus, costFn]
+  );
 
   const exportReport = () => {
     if (!gangResult || !gangResult.ok) {
@@ -756,6 +808,12 @@ export default function Flexo() {
               margin={parseFloat(project.press.edgeMargin) || 0}
               gapAcross={parseFloat(project.press.gapAcross) || 0}
               colorOf={colorOf}
+          onMove={moveSku}
+          onReset={() => {
+            setManualGroups(null);
+            setGangResult(null);
+            toast.success("Back to the planner's split — press Calculate.");
+          }}
             />
           )}
           {tab === "plates" && (

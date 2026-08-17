@@ -27,7 +27,7 @@ function load() {
       const { solveGang } = gang;
       const { cylinderTeeth, round } = layout;
       ${strip(path.join(LIB, "flexo", "plates.js"))}
-      return { solvePlateSets, minimumWidth, diagnoseSplit };
+      return { solvePlateSets, minimumWidth, diagnoseSplit, solveGroups };
     })();
     const pdf = (function () {
       ${strip(path.join(LIB, "pdf", "minipdf.js"))}
@@ -41,7 +41,7 @@ function load() {
   return sandbox.module.exports;
 }
 
-const { solvePlateSets, minimumWidth, diagnoseSplit, pdf } = load();
+const { solvePlateSets, minimumWidth, diagnoseSplit, solveGroups, pdf } = load();
 
 let failures = 0;
 let checks = 0;
@@ -359,6 +359,77 @@ section("9. A split says what is actually stopping it");
   check("a single SKU has nothing to diagnose", diagnoseSplit([skus[0]], {
     gutter: 3, margin: 5, widest: 650, teethList: [136], pitch: 3.175,
   }) === null);
+}
+
+section("10. A grouping moved by hand is still solved properly");
+{
+  const four = [
+    { id: "a", name: "A", width: 100, height: 60, qty: 40000, canRotate: true },
+    { id: "b", name: "B", width: 100, height: 60, qty: 40000, canRotate: true },
+    { id: "c", name: "C", width: 90, height: 55, qty: 30000, canRotate: true },
+    { id: "d", name: "D", width: 80, height: 50, qty: 20000, canRotate: true },
+  ];
+  const args = { ...PRESS, skus: four };
+
+  const auto = solvePlateSets(args);
+  check("the planner puts these four on one plate", auto.totals.plates === 1, `${auto.totals.plates}`);
+
+  // Two jobs that belong apart, whatever the planner would prefer.
+  const byHand = solveGroups({ ...args, groups: [["a", "b"], ["c", "d"]] });
+  check("a hand-made grouping solves", byHand.ok === true, (byHand.errors || []).join(", "));
+  check("it uses the plates it was given", byHand.totals.plates === 2, `${byHand.totals.plates}`);
+  check("with the SKUs where they were put",
+    byHand.plates[0].plan.lanes.map((l) => l.id).sort().join(",") === "a,b", 
+    byHand.plates[0].plan.lanes.map((l) => l.id).join(","));
+  check("it says it was not the planner's idea", byHand.manual === true && byHand.strategy === "moved by hand");
+  check("every SKU still meets its order",
+    byHand.plates.every((p) => p.plan.lanes.every((l) => l.printed >= l.ordered)));
+  check("totals add up across the plates",
+    Math.abs(byHand.totals.materialArea - byHand.plates.reduce((s, p) => s + p.plan.materialArea, 0)) < 1);
+  check("ordered is what was ordered", byHand.totals.ordered === 130000, `${byHand.totals.ordered}`);
+
+  // Each plate is still solved, not just accepted: a plate of one is a
+  // step-and-repeat and gets its own best web and cylinder.
+  check("each plate got its own web width",
+    byHand.plates[0].plan.webWidth !== byHand.plates[1].plan.webWidth ||
+    byHand.plates[0].plan.teeth !== byHand.plates[1].plan.teeth,
+    "both plates came out identical, which would suggest they were not solved separately");
+
+  // Taking one off the run leaves the rest intact.
+  const dropped = solveGroups({ ...args, groups: [["a", "b"], ["c"]] });
+  check("a SKU can be taken off the run", dropped.ok && dropped.totals.skus === 3, `${dropped.totals?.skus}`);
+  check("and the ordered total follows it out", dropped.totals.ordered === 110000, `${dropped.totals.ordered}`);
+
+  // A move that cannot fit is refused, and says which plate and why.
+  const tooMuch = solveGroups({
+    ...PRESS,
+    skus: [
+      { id: "x", name: "Wide X", width: 600, height: 200, qty: 1000, canRotate: false },
+      { id: "y", name: "Wide Y", width: 600, height: 200, qty: 1000, canRotate: false },
+    ],
+    groups: [["x", "y"]],
+  });
+  check("an impossible plate is refused", tooMuch.ok === false);
+  check("naming the plate", tooMuch.errors[0].includes("Plate 1"), tooMuch.errors[0]);
+  check("and what is on it", tooMuch.errors[0].includes("Wide X"), tooMuch.errors[0]);
+
+  check("empty groups are refused", solveGroups({ ...args, groups: [[], []] }).ok === false);
+  check("an unknown id is ignored rather than crashing",
+    solveGroups({ ...args, groups: [["a", "ghost"]] }).ok === true);
+
+  // Costing carries through a hand-made grouping the same way.
+  const priced = solveGroups({
+    ...args,
+    groups: [["a", "b"], ["c", "d"]],
+    cost: (plan) => ({
+      plateCost: ((plan.repeat * plan.webWidth) / 100) * 1.3 * 4,
+      materialCost: (plan.materialArea / 1e6) * 15.4,
+    }),
+  });
+  check("a hand-made grouping is costed too", priced.totals.totalCost > 0, `${priced.totals.totalCost}`);
+  check("per thousand is over everything ordered",
+    Math.abs(priced.totals.costPerThousand - (priced.totals.totalCost / priced.totals.ordered) * 1000) < 1e-6);
+  check("each plate carries its own share", priced.plates.every((p) => p.cost.plateCost > 0));
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
