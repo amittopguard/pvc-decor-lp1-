@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { Panel, ToolButton, IconButton } from "@/components/cutlist/fields";
-import { fromMinor, toMinor, formatMoney } from "@/lib/vault/api";
+import { errorText, fromMinor, toMinor, formatMoney } from "@/lib/vault/api";
 
 const inputClass =
   "w-full border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none " +
@@ -179,7 +179,7 @@ export default function PlateEditor({
         })),
       });
     } catch (e) {
-      setError(e?.response?.data?.detail || e.message || "Could not save the plate");
+      setError(errorText(e, "Could not save the plate"));
     } finally {
       setSaving(false);
     }

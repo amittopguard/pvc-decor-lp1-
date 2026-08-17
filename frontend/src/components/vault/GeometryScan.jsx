@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Info, Loader2, Radio, RefreshCw } from "lucide-react";
 import { Panel, ToolButton } from "@/components/cutlist/fields";
-import { reportGeometry } from "@/lib/vault/api";
+import { errorText, reportGeometry } from "@/lib/vault/api";
 
 const SEVERITY = {
   error: { rank: 0, className: "border-red-300 bg-red-50 text-red-800", label: "Error", Icon: AlertTriangle },
@@ -40,7 +40,7 @@ export default function GeometryScan({ tolerance = 0.5 }) {
       setScan(await reportGeometry(tolerance));
       setError(null);
     } catch (e) {
-      setError(e?.response?.data?.detail || "Could not run the scan.");
+      setError(errorText(e, "Could not run the scan."));
     } finally {
       setBusy(false);
       setCountdown(REFRESH_SECONDS);

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Panel, ToolButton, IconButton } from "@/components/cutlist/fields";
+import { errorText } from "@/lib/vault/api";
 
 const inputClass =
   "w-full border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 outline-none " +
@@ -37,7 +38,7 @@ export default function RecordTable({
       await onCreate(draft);
       setDraft({});
     } catch (e) {
-      setError(e?.response?.data?.detail || e.message || "Could not save");
+      setError(errorText(e, "Could not save"));
     }
   };
 
@@ -47,7 +48,7 @@ export default function RecordTable({
       await onUpdate(editingId, editDraft);
       setEditingId(null);
     } catch (e) {
-      setError(e?.response?.data?.detail || e.message || "Could not save");
+      setError(errorText(e, "Could not save"));
     }
   };
 
@@ -56,7 +57,7 @@ export default function RecordTable({
     try {
       await onDelete(id);
     } catch (e) {
-      setError(e?.response?.data?.detail || e.message || "Could not delete");
+      setError(errorText(e, "Could not delete"));
     }
   };
 

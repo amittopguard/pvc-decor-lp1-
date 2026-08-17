@@ -15,17 +15,21 @@ import {
   createPlate,
   createRecord,
   deleteArtworkFile,
+  deleteLayout,
   deleteOrder,
   deletePlate,
   deleteRecord,
   downloadWithToken,
+  errorText,
   formatMoney,
   getPlate,
   hasToken,
   listArtworkFiles,
+  listLayouts,
   listOrders,
   listPlates,
   listRecords,
+  plateFromLayout,
   reportArtworks,
   reportCost,
   reportKld,
@@ -116,7 +120,7 @@ function ArtworkFiles({ artwork, onChanged }) {
       load();
       onChanged?.();
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Upload failed.");
+      toast.error(errorText(e, "Upload failed."));
     } finally {
       setBusy(false);
       event.target.value = "";
@@ -183,6 +187,7 @@ export default function Vault() {
   const [openArtwork, setOpenArtwork] = useState(null);
 
   const [orders, setOrders] = useState([]);
+  const [layouts, setLayouts] = useState([]);
 
   const [repArtworks, setRepArtworks] = useState([]);
   const [repKld, setRepKld] = useState([]);
@@ -198,7 +203,7 @@ export default function Vault() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [m, c, v, d, mo, a, p, o] = await Promise.all([
+      const [m, c, v, d, mo, a, p, o, y] = await Promise.all([
         listRecords("moulders"),
         listRecords("customers"),
         listRecords("vendors"),
@@ -207,6 +212,7 @@ export default function Vault() {
         listRecords("artworks"),
         listPlates(),
         listOrders(),
+        listLayouts(),
       ]);
       setMoulders(m);
       setCustomers(c);
@@ -216,6 +222,7 @@ export default function Vault() {
       setArtworks(a);
       setPlates(p);
       setOrders(o);
+      setLayouts(y);
       const [ra, rk, rr, rc, ro, rp] = await Promise.all([
         reportArtworks(),
         reportKld(),
@@ -327,6 +334,7 @@ export default function Vault() {
           <OrderBoard
             orders={orders}
             board={repOrders}
+            layouts={layouts}
             customers={customers}
             artworks={artworks}
             dies={dies}
@@ -350,6 +358,16 @@ export default function Vault() {
               await deleteOrder(id);
               await loadAll();
               toast.success("Order deleted.");
+            }}
+            onMakePlate={async (id) => {
+              const plate = await plateFromLayout(id);
+              await loadAll();
+              toast.success(`Plate ${plate.plate_number} made from the layout.`);
+            }}
+            onDeleteLayout={async (id) => {
+              await deleteLayout(id);
+              await loadAll();
+              toast.success("Layout deleted.");
             }}
           />
         )}

@@ -244,6 +244,43 @@ SCHEMA = [
         updated_at VARCHAR(64)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS vault_layouts (
+        id VARCHAR(64) PRIMARY KEY,
+        order_id VARCHAR(64),
+        plate_id VARCHAR(64),
+        name VARCHAR(255),
+        kind VARCHAR(32),
+        unit VARCHAR(8),
+        label_width DOUBLE,
+        label_height DOUBLE,
+        quantity INT,
+        colours INT,
+        plate_sets INT,
+        web_width DOUBLE,
+        repeat_mm DOUBLE,
+        teeth INT,
+        across INT,
+        around INT,
+        per_rev INT,
+        rotated INT,
+        utilisation DOUBLE,
+        material_area DOUBLE,
+        web_length DOUBLE,
+        revolutions INT,
+        overrun INT,
+        plate_area_cm2 DOUBLE,
+        plate_cost_minor INT,
+        material_cost_minor INT,
+        total_cost_minor INT,
+        per_thousand_minor INT,
+        ranked_by VARCHAR(16),
+        payload TEXT,
+        saved_by VARCHAR(128),
+        notes TEXT,
+        created_at VARCHAR(64)
+    )
+    """,
 ]
 
 # Columns added after the first release. CREATE TABLE IF NOT EXISTS leaves an
@@ -417,6 +454,79 @@ class OrderStatus(BaseModel):
     design_notes: Optional[str] = None
 
 
+class Layout(BaseModel):
+    """
+    A calculation the optimiser produced, kept so it survives the browser it
+    was worked out in and so the plate that follows from it can be made
+    without anybody retyping the numbers.
+    """
+
+    name: Optional[str] = None
+    kind: Optional[str] = "step_repeat"
+    order_id: Optional[str] = None
+    plate_id: Optional[str] = None
+    unit: Optional[str] = "mm"
+    label_width: Optional[float] = None
+    label_height: Optional[float] = None
+    quantity: Optional[int] = None
+    colours: Optional[int] = None
+    plate_sets: Optional[int] = None
+    web_width: Optional[float] = None
+    repeat_mm: Optional[float] = None
+    teeth: Optional[int] = None
+    across: Optional[int] = None
+    around: Optional[int] = None
+    per_rev: Optional[int] = None
+    rotated: Optional[bool] = None
+    utilisation: Optional[float] = None
+    material_area: Optional[float] = None
+    web_length: Optional[float] = None
+    revolutions: Optional[int] = None
+    overrun: Optional[int] = None
+    plate_area_cm2: Optional[float] = None
+    plate_cost_minor: Optional[int] = None
+    material_cost_minor: Optional[int] = None
+    total_cost_minor: Optional[int] = None
+    per_thousand_minor: Optional[int] = None
+    ranked_by: Optional[str] = None
+    # The whole project as the optimiser had it, so the layout can be reopened
+    # and recalculated rather than only read back.
+    payload: Optional[dict] = None
+    saved_by: Optional[str] = None
+    notes: Optional[str] = None
+
+
+LAYOUT_KINDS = {"step_repeat", "gang", "plate_nest"}
+
+
+class PlateFromLayout(BaseModel):
+    """
+    Overrides when turning a layout into a plate. Every field is optional —
+    the layout and its order already supply the rest — so an empty body is a
+    perfectly good request.
+    """
+
+    plate_number: Optional[str] = None
+    vendor_id: Optional[str] = None
+    die_id: Optional[str] = None
+    mould_id: Optional[str] = None
+    made_on: Optional[str] = None
+    artwork_label: Optional[str] = None
+    kld_label: Optional[str] = None
+    actual_cost_minor: Optional[int] = None
+    currency: Optional[str] = None
+    paid_by: Optional[str] = None
+    paid_by_note: Optional[str] = None
+    charge_policy: Optional[str] = None
+    charge_percent: Optional[float] = None
+    charge_customer_id: Optional[str] = None
+    charged_minor: Optional[int] = None
+    refund_after_qty: Optional[int] = None
+    refunded_minor: Optional[int] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
 ENTITIES = {
     "moulders": ("vault_moulders", Moulder, ["name", "city", "contact", "notes"], "name"),
     "customers": ("vault_customers", Customer, ["name", "code", "moulder_id", "contact", "gst", "notes"], "name"),
@@ -471,6 +581,7 @@ def build(database, require_admin, upload_dir: Path):
             "artwork_id": "vault_artworks",
             "charge_customer_id": "vault_customers",
             "plate_id": "vault_plates",
+            "order_id": "vault_orders",
             "parent_order_id": "vault_orders",
         }
         for field, table in refs.items():
@@ -729,6 +840,11 @@ def build(database, require_admin, upload_dir: Path):
                 status_code=409, detail=f"Still used by {used['n']} orders. Remove those first."
             )
         await database.execute("DELETE FROM vault_plate_lines WHERE plate_id = :id", {"id": plate_id})
+        # A saved layout outlives the plate that came out of it, so it is
+        # unhooked rather than deleted.
+        await database.execute(
+            "UPDATE vault_layouts SET plate_id = NULL WHERE plate_id = :id", {"id": plate_id}
+        )
         await database.execute("DELETE FROM vault_plates WHERE id = :id", {"id": plate_id})
         return {"ok": True}
 
@@ -744,7 +860,8 @@ def build(database, require_admin, upload_dir: Path):
         SELECT o.*, c.name AS customer_name, a.code AS artwork_code, a.name AS artwork_name,
                d.kld_number, p.plate_number, p.artwork_label, p.kld_label,
                po.order_number AS parent_order_number,
-               (SELECT COUNT(*) FROM vault_orders r WHERE r.parent_order_id = o.id) AS repeat_count
+               (SELECT COUNT(*) FROM vault_orders r WHERE r.parent_order_id = o.id) AS repeat_count,
+               (SELECT COUNT(*) FROM vault_layouts y WHERE y.order_id = o.id) AS layout_count
         FROM vault_orders o
         LEFT JOIN vault_customers c ON c.id = o.customer_id
         LEFT JOIN vault_artworks a ON a.id = o.artwork_id
@@ -858,6 +975,158 @@ def build(database, require_admin, upload_dir: Path):
         )
         return await get_order(order_id, True)
 
+    # ---- saved optimiser layouts ------------------------------------------
+
+    LAYOUT_FIELDS = [
+        "order_id", "plate_id", "name", "kind", "unit", "label_width", "label_height",
+        "quantity", "colours", "plate_sets", "web_width", "repeat_mm", "teeth", "across",
+        "around", "per_rev", "rotated", "utilisation", "material_area", "web_length",
+        "revolutions", "overrun", "plate_area_cm2", "plate_cost_minor", "material_cost_minor",
+        "total_cost_minor", "per_thousand_minor", "ranked_by", "payload", "saved_by", "notes",
+    ]
+
+    LAYOUT_SELECT = """
+        SELECT l.*, o.order_number, c.name AS customer_name, p.plate_number,
+               a.code AS artwork_code, d.kld_number
+        FROM vault_layouts l
+        LEFT JOIN vault_orders o ON o.id = l.order_id
+        LEFT JOIN vault_customers c ON c.id = o.customer_id
+        LEFT JOIN vault_plates p ON p.id = l.plate_id
+        LEFT JOIN vault_artworks a ON a.id = o.artwork_id
+        LEFT JOIN vault_dies d ON d.id = o.die_id
+    """
+
+    def _layout_out(row) -> dict:
+        out = dict(row)
+        # The payload goes in as JSON text and comes back as an object.
+        try:
+            out["payload"] = json.loads(out["payload"]) if out.get("payload") else None
+        except (TypeError, ValueError):
+            out["payload"] = None
+        out["rotated"] = bool(out.get("rotated"))
+        return out
+
+    @router.get("/layouts")
+    async def list_layouts(
+        order_id: Optional[str] = None,
+        plate_id: Optional[str] = None,
+        _: bool = Depends(require_admin),
+    ):
+        clauses, params = [], {}
+        for field, value in (("l.order_id", order_id), ("l.plate_id", plate_id)):
+            if value:
+                key = field.split(".")[1]
+                clauses.append(f"{field} = :{key}")
+                params[key] = value
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = await database.fetch_all(f"{LAYOUT_SELECT} {where} ORDER BY l.created_at DESC", params)
+        return {"items": [_layout_out(r) for r in rows]}
+
+    @router.get("/layouts/{layout_id}")
+    async def get_layout(layout_id: str, _: bool = Depends(require_admin)):
+        row = await database.fetch_one(f"{LAYOUT_SELECT} WHERE l.id = :id", {"id": layout_id})
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        return _layout_out(row)
+
+    @router.post("/layouts")
+    async def create_layout(body: Layout, _: bool = Depends(require_admin)):
+        if body.kind and body.kind not in LAYOUT_KINDS:
+            raise HTTPException(status_code=400, detail=f"kind must be one of {sorted(LAYOUT_KINDS)}")
+        data = body.model_dump()
+        await _check_refs("layouts", data)
+        row = {"id": _new_id(), "created_at": _now(), **{f: data.get(f) for f in LAYOUT_FIELDS}}
+        row["kind"] = row["kind"] or "step_repeat"
+        row["rotated"] = 1 if row["rotated"] else 0
+        row["payload"] = json.dumps(row["payload"]) if row["payload"] is not None else None
+        if not (row["name"] or "").strip():
+            row["name"] = f"{row['across'] or '?'} × {row['around'] or '?'} on {row['teeth'] or '?'}T"
+        cols = ", ".join(row.keys())
+        vals = ", ".join(f":{k}" for k in row.keys())
+        await database.execute(f"INSERT INTO vault_layouts ({cols}) VALUES ({vals})", row)
+        return await get_layout(row["id"], True)
+
+    @router.post("/layouts/{layout_id}/plate")
+    async def plate_from_layout(
+        layout_id: str, body: Optional[PlateFromLayout] = None, _: bool = Depends(require_admin)
+    ):
+        """
+        Turn a saved layout into a plate record.
+
+        Everything the plate needs is already in the layout — the repeat, the web
+        width, the colours and what it works out at — and everything else comes
+        from the order it was saved against, so nothing is retyped.
+        """
+        row = await database.fetch_one("SELECT * FROM vault_layouts WHERE id = :id", {"id": layout_id})
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        if row["plate_id"]:
+            raise HTTPException(status_code=409, detail="This layout already has a plate")
+
+        order = None
+        if row["order_id"]:
+            order = await database.fetch_one(
+                "SELECT * FROM vault_orders WHERE id = :id", {"id": row["order_id"]}
+            )
+
+        given = body.model_dump() if body else {}
+        plate_id = _new_id()
+        plate = {
+            "id": plate_id,
+            "created_at": _now(),
+            "plate_number": (given.get("plate_number") or "").strip()
+            or f"PL-{(order['order_number'] if order else row['id'][:6]).upper()}",
+            "vendor_id": given.get("vendor_id"),
+            "die_id": given.get("die_id") or (order["die_id"] if order else None),
+            "mould_id": given.get("mould_id"),
+            "made_on": given.get("made_on"),
+            "repeat_mm": row["repeat_mm"],
+            "web_width": row["web_width"],
+            "colours": row["colours"],
+            "plate_sets": row["plate_sets"] or 1,
+            "artwork_label": given.get("artwork_label"),
+            "kld_label": given.get("kld_label"),
+            "actual_cost_minor": given.get("actual_cost_minor")
+            if given.get("actual_cost_minor") is not None
+            else row["plate_cost_minor"],
+            "currency": given.get("currency") or "INR",
+            "paid_by": given.get("paid_by"),
+            "paid_by_note": given.get("paid_by_note"),
+            "charge_policy": given.get("charge_policy") or "full",
+            "charge_percent": given.get("charge_percent"),
+            "charge_customer_id": given.get("charge_customer_id")
+            or (order["customer_id"] if order else None),
+            "charged_minor": given.get("charged_minor"),
+            "refund_after_qty": given.get("refund_after_qty"),
+            "refunded_minor": given.get("refunded_minor"),
+            "status": given.get("status") or "planned",
+            "notes": given.get("notes") or f"From layout {row['name']}",
+        }
+        cols = ", ".join(plate.keys())
+        vals = ", ".join(f":{k}" for k in plate.keys())
+        await database.execute(f"INSERT INTO vault_plates ({cols}) VALUES ({vals})", plate)
+
+        # The order's artwork goes on the plate, which is what gives the plate
+        # its artwork name.
+        if order and order["artwork_id"]:
+            await _write_lines(plate_id, [PlateLine(artwork_id=order["artwork_id"], ups=row["per_rev"])])
+        await _derive_labels(plate_id)
+
+        await database.execute(
+            "UPDATE vault_layouts SET plate_id = :plate WHERE id = :id", {"plate": plate_id, "id": layout_id}
+        )
+        if order and not order["plate_id"]:
+            await database.execute(
+                "UPDATE vault_orders SET plate_id = :plate, updated_at = :now WHERE id = :id",
+                {"plate": plate_id, "now": _now(), "id": order["id"]},
+            )
+        return await _plate_with_lines(plate_id)
+
+    @router.delete("/layouts/{layout_id}")
+    async def delete_layout(layout_id: str, _: bool = Depends(require_admin)):
+        await database.execute("DELETE FROM vault_layouts WHERE id = :id", {"id": layout_id})
+        return {"ok": True}
+
     @router.delete("/orders/{order_id}")
     async def delete_order(order_id: str, _: bool = Depends(require_admin)):
         repeats = await database.fetch_one(
@@ -866,6 +1135,13 @@ def build(database, require_admin, upload_dir: Path):
         if repeats and repeats["n"]:
             raise HTTPException(
                 status_code=409, detail=f"Still the original for {repeats['n']} repeat orders. Remove those first."
+            )
+        saved = await database.fetch_one(
+            "SELECT COUNT(*) AS n FROM vault_layouts WHERE order_id = :id", {"id": order_id}
+        )
+        if saved and saved["n"]:
+            raise HTTPException(
+                status_code=409, detail=f"Still holds {saved['n']} saved layouts. Remove those first."
             )
         await database.execute("DELETE FROM vault_orders WHERE id = :id", {"id": order_id})
         return {"ok": True}

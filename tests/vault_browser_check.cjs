@@ -362,6 +362,7 @@ const waitFor = async (url, tries = 60) => {
   await page.locator("tbody tr:has-text('SO-1') button:has-text('SO-1')").first().dispatchEvent("click");
   await page.waitForTimeout(400);
   await page.locator("[aria-label='Artwork']").selectOption({ index: 1 });
+  await page.locator("[aria-label='KLD']").selectOption({ index: 1 });
   await tap("button:has-text('Save order')");
   await page.waitForTimeout(600);
   await settle();
@@ -463,6 +464,68 @@ const waitFor = async (url, tries = 60) => {
   await hideToasts();
   scanText = await page.locator("main").innerText();
   check("fixing the record clears the scan", /Every artwork matches/.test(scanText), scanText.slice(0, 300));
+
+  console.log("\nA layout calculated in the optimiser is saved to the vault");
+  await page.goto(`http://localhost:${WEB_PORT}/flexo`, { waitUntil: "networkidle" });
+  await page.waitForSelector("h1:has-text('Flexo Label Optimizer')");
+  await tap("button:has-text('Sample')");
+  await page.waitForTimeout(400);
+  await tap("button:has-text('Calculate')");
+  await page.waitForSelector("text=One repeat", { timeout: 20000 });
+  await hideToasts();
+
+  const layoutName = await page
+    .locator("[aria-label='Layout name']")
+    .getAttribute("placeholder");
+  check("the save panel offers the calculated layout", /\d+ × \d+ on \d+T/.test(layoutName || ""), `${layoutName}`);
+
+  await page.locator("[aria-label='Save the layout to this order']").selectOption({ index: 1 });
+  await page.locator("[aria-label='Saved by']").fill("Design Ravi");
+  await tap("button:has-text('Save to vault')");
+  await page.waitForSelector("text=not made yet", { timeout: 20000 });
+  await hideToasts();
+  const savedRow = await page.locator("tbody tr:has-text('Design Ravi')").first().innerText();
+  check("the saved layout lists against its order", /SO-1/.test(savedRow), savedRow);
+  check("with the cost it was ranked on", /₹/.test(savedRow), savedRow);
+
+  console.log("\nAnd the plate follows from it");
+  await page.goto(`http://localhost:${WEB_PORT}/vault`, { waitUntil: "networkidle" });
+  await page.waitForSelector("h1:has-text('Artwork & plate vault')", { timeout: 20000 });
+  await tap("button:has-text('Orders')");
+  await page.waitForSelector("text=Layouts saved from the optimiser", { timeout: 25000 });
+  await settle();
+  await hideToasts();
+  let boardText = await page.locator("main").innerText();
+  check("the board shows the layout saved from the optimiser", /1 saved layout/.test(boardText), boardText.slice(0, 400));
+  check(
+    "and lists its web and repeat",
+    /layouts saved from the optimiser/i.test(boardText) && /\d+ × \d+\.\d/.test(boardText),
+    boardText.slice(0, 300)
+  );
+
+  await page.locator("button:has-text('Make the plate')").first().dispatchEvent("click");
+  await page.waitForSelector("text=Layouts saved from the optimiser", { timeout: 25000 });
+  await page.waitForFunction(
+    () => !/Make the plate/.test(document.querySelector("main")?.innerText || ""),
+    null,
+    { timeout: 25000 }
+  );
+  await settle();
+  await hideToasts();
+  boardText = await page.locator("main").innerText();
+  check(
+    "the layout now names its plate",
+    /PL-SO-1/.test(boardText),
+    boardText.slice(-400)
+  );
+
+  await tap("button:has-text('Plates')");
+  await settle();
+  await hideToasts();
+  const plateRows = await page.locator("tbody tr:has-text('PL-SO-1')").first().innerText();
+  check("the plate carries the order's artwork", /AW-/.test(plateRows) || /Label AW/.test(plateRows), plateRows);
+  check("and the KLD it was cut against", /KLD-101/.test(plateRows), plateRows);
+  await page.screenshot({ path: path.join(SHOTS, "vault-layouts.png"), fullPage: true });
 
   console.log("\nGuards surface in the UI");
   await tap("button:has-text('Customers & vendors')");

@@ -11,6 +11,8 @@ import { colorForIndex } from "@/components/cutlist/SheetDiagram";
 import { CheckCell, IconButton, NumberCell, Panel, TextCell, ToolButton } from "@/components/cutlist/fields";
 import { Lock, Plus, RotateCw, Trash2 } from "lucide-react";
 import ShopRates, { DEFAULT_COSTING } from "@/components/flexo/ShopRates";
+import SaveToOrder from "@/components/flexo/SaveToOrder";
+import { getLayout } from "@/lib/vault/api";
 import { layoutCostFn, formatPaise } from "@/lib/costing/costing";
 import { solveStepRepeat, getPitch } from "@/lib/flexo/layout";
 import { solvePlateSets } from "@/lib/flexo/plates";
@@ -259,6 +261,40 @@ export default function Flexo() {
     });
   }, [project.costing, project.quantity, unit]);
 
+  /**
+   * Put a saved layout back on the page. The stored payload is the whole
+   * project, so what comes back is editable input rather than a read-only
+   * record of a number somebody once got.
+   */
+  const openLayout = useCallback((layout) => {
+    const p = layout?.payload;
+    if (!p) {
+      toast.error("That layout was saved without its settings and cannot be reopened.");
+      return;
+    }
+    setProject((prev) => ({
+      ...prev,
+      tab: "repeat",
+      unit: layout.unit || prev.unit,
+      label: { ...prev.label, ...(p.label || {}) },
+      press: { ...prev.press, ...(p.press || {}) },
+      costing: { ...DEFAULT_COSTING(), ...(p.costing || {}), film: { ...DEFAULT_COSTING().film, ...(p.costing?.film || {}) } },
+      quantity: p.quantity ?? prev.quantity,
+    }));
+    setRepeatResult(null);
+    setSelectedRepeat(0);
+    toast.success(`${layout.name} loaded — press Calculate to work it out again.`);
+  }, []);
+
+  // A layout can be opened straight from the vault by its id.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("layout");
+    if (!id) return;
+    getLayout(id)
+      .then(openLayout)
+      .catch(() => toast.error("Could not open that layout. Sign in to the vault first."));
+  }, [openLayout]);
+
   const calculate = useCallback(async () => {
     setBusy(true);
     await new Promise((r) => setTimeout(r, 16));
@@ -491,6 +527,13 @@ export default function Flexo() {
               </Panel>
               <PressSettings press={project.press} unit={unit} onChange={(press) => patch({ press })} newWeb={newWeb} />
               <ShopRates costing={project.costing} onChange={(costing) => patch({ costing })} />
+              <SaveToOrder
+                result={repeatResult}
+                selected={selectedRepeat}
+                project={project}
+                unit={unit}
+                onOpen={openLayout}
+              />
             </>
           )}
 

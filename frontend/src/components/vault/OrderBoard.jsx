@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { Copy, Plus, Trash2, X } from "lucide-react";
+import { Copy, ExternalLink, Plus, Trash2, X } from "lucide-react";
 import { Panel, ToolButton, IconButton } from "@/components/cutlist/fields";
+import { errorText, formatMoney } from "@/lib/vault/api";
 
 const inputClass =
   "w-full border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 outline-none " +
@@ -130,6 +131,7 @@ function OrderForm({ draft, setDraft, customers, artworks, dies, plates, orders,
 export default function OrderBoard({
   orders,
   board,
+  layouts = [],
   customers,
   artworks,
   dies,
@@ -139,6 +141,8 @@ export default function OrderBoard({
   onUpdate,
   onStatus,
   onDelete,
+  onMakePlate,
+  onDeleteLayout,
 }) {
   const [draft, setDraft] = useState(null);
   const [editing, setEditing] = useState(null);
@@ -179,7 +183,7 @@ export default function OrderBoard({
       setDraft(null);
       setEditing(null);
     } catch (e) {
-      setError(e?.response?.data?.detail || e.message || "Could not save the order");
+      setError(errorText(e, "Could not save the order"));
     } finally {
       setSaving(false);
     }
@@ -190,7 +194,7 @@ export default function OrderBoard({
     try {
       await onStatus(order.id, { status });
     } catch (e) {
-      setError(e?.response?.data?.detail || "Could not move the order");
+      setError(errorText(e, "Could not move the order"));
     }
   };
 
@@ -296,6 +300,11 @@ export default function OrderBoard({
                     {o.repeat_count > 0 && (
                       <span className="block text-[11px] text-slate-500">{o.repeat_count} repeats</span>
                     )}
+                    {o.layout_count > 0 && (
+                      <span className="block text-[11px] text-slate-500">
+                        {o.layout_count} saved layout{o.layout_count === 1 ? "" : "s"}
+                      </span>
+                    )}
                   </td>
                   <td className="px-2 py-1.5">{o.customer_name || "—"}</td>
                   <td className="px-2 py-1.5">
@@ -345,7 +354,7 @@ export default function OrderBoard({
                           try {
                             await onDelete(o.id);
                           } catch (e) {
-                            setError(e?.response?.data?.detail || "Could not delete the order");
+                            setError(errorText(e, "Could not delete the order"));
                           }
                         }}
                       >
@@ -366,6 +375,92 @@ export default function OrderBoard({
           </tbody>
         </table>
       </div>
+
+      {layouts.length > 0 && (
+        <div className="border-t border-slate-200">
+          <h3 className="px-3 pt-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+            Layouts saved from the optimiser ({layouts.length})
+          </h3>
+          <div className="relative overflow-x-auto">
+            <table className="w-full min-w-[820px] border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
+                  <th className="px-2 py-1.5 text-left font-medium">Layout</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Order</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Web × repeat</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Up</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Per 1000</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Plate</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {layouts.map((l) => (
+                  <tr key={l.id} className="border-b border-slate-100 last:border-0">
+                    <td className="px-2 py-1.5">
+                      <a
+                        className="font-medium text-orange-700 underline-offset-2 hover:underline"
+                        href={`/flexo?layout=${l.id}`}
+                        title="Open this layout in the optimiser"
+                      >
+                        {l.name} <ExternalLink className="inline h-3 w-3" />
+                      </a>
+                      {l.saved_by && <span className="block text-[11px] text-slate-500">{l.saved_by}</span>}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {l.order_number || "—"}
+                      {l.artwork_code && <span className="block text-[11px] text-slate-500">{l.artwork_code}</span>}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {l.web_width ?? "—"} × {l.repeat_mm ? Number(l.repeat_mm).toFixed(1) : "—"}
+                      {l.teeth ? <span className="block text-[11px] text-slate-500">{l.teeth}T</span> : null}
+                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{l.per_rev ?? "—"}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {l.per_thousand_minor ? formatMoney(l.per_thousand_minor) : "—"}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {l.plate_number || <span className="text-slate-400">not made yet</span>}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center justify-end gap-1">
+                        {!l.plate_id && (
+                          <ToolButton
+                            disabled={busy}
+                            onClick={async () => {
+                              setError(null);
+                              try {
+                                await onMakePlate(l.id);
+                              } catch (e) {
+                                setError(errorText(e, "Could not make the plate"));
+                              }
+                            }}
+                          >
+                            Make the plate
+                          </ToolButton>
+                        )}
+                        <IconButton
+                          title="Delete this saved layout"
+                          onClick={async () => {
+                            setError(null);
+                            try {
+                              await onDeleteLayout(l.id);
+                            } catch (e) {
+                              setError(errorText(e, "Could not delete the layout"));
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </IconButton>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {board?.waiting_on_design?.length > 0 && (
         <footer className="flex flex-wrap items-center gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">

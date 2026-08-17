@@ -29,6 +29,15 @@ export const updateOrder = (id, body) => unwrap(adminApi.put(`/vault/orders/${id
 export const setOrderStatus = (id, body) => unwrap(adminApi.patch(`/vault/orders/${id}/status`, body));
 export const deleteOrder = (id) => unwrap(adminApi.delete(`/vault/orders/${id}`));
 
+export const listLayouts = (params = {}) => {
+  const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+  return unwrap(adminApi.get(`/vault/layouts${query ? `?${query}` : ""}`)).then((d) => d.items || []);
+};
+export const getLayout = (id) => unwrap(adminApi.get(`/vault/layouts/${id}`));
+export const createLayout = (body) => unwrap(adminApi.post("/vault/layouts", body));
+export const deleteLayout = (id) => unwrap(adminApi.delete(`/vault/layouts/${id}`));
+export const plateFromLayout = (id, body = {}) => unwrap(adminApi.post(`/vault/layouts/${id}/plate`, body));
+
 export const reportOrders = () => unwrap(adminApi.get("/vault/reports/orders"));
 export const reportPlateCharges = () => unwrap(adminApi.get("/vault/reports/plate-charges"));
 
@@ -72,6 +81,23 @@ export async function downloadWithToken(path, filename) {
   a.click();
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * One line of text from whatever the API said went wrong.
+ *
+ * FastAPI answers our own errors with a string, but a validation failure comes
+ * back as a list of objects — putting that straight on screen is what React
+ * refuses to render, so it is flattened here rather than at each call site.
+ */
+export function errorText(e, fallback = "Something went wrong.") {
+  const detail = e?.response?.data?.detail;
+  if (typeof detail === "string" && detail) return detail;
+  if (Array.isArray(detail) && detail.length) {
+    return detail.map((d) => d?.msg || JSON.stringify(d)).join("; ");
+  }
+  if (detail && typeof detail === "object") return JSON.stringify(detail);
+  return e?.message || fallback;
 }
 
 /** Money is held as an integer in paise so it never drifts through floats. */

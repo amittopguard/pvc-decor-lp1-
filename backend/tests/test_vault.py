@@ -575,7 +575,96 @@ def run(client):
         client.post("/vault/orders", json={"order_number": "SO-X", "plate_id": "nope"}).status_code == 400,
     )
 
-    section("18. The charge maths on its own")
+    section("18. A calculated layout is saved, not left in a browser")
+    job2 = client.post(
+        "/vault/orders",
+        json={"order_number": "SO-4", "customer_id": customer["id"], "artwork_id": artworks[2]["id"],
+              "die_id": die["id"], "quantity": 100000, "colours": 4, "raised_by": "CRM Anita"},
+    ).json()
+
+    layout = client.post(
+        "/vault/layouts",
+        json={
+            "order_id": job2["id"], "kind": "step_repeat", "unit": "mm",
+            "label_width": 100, "label_height": 60, "quantity": 100000, "colours": 4, "plate_sets": 1,
+            "web_width": 322, "repeat_mm": 206.375, "teeth": 65, "across": 5, "around": 2, "per_rev": 10,
+            "rotated": True, "utilisation": 0.903, "material_area": 664728000, "web_length": 2063750,
+            "revolutions": 10000, "overrun": 0, "plate_area_cm2": 664.5275,
+            "plate_cost_minor": 345554, "material_cost_minor": 1023481, "total_cost_minor": 1369035,
+            "per_thousand_minor": 13690, "ranked_by": "cost",
+            "payload": {"press": {"minWidth": 320, "maxWidth": 650}, "label": {"width": 100, "height": 60}},
+            "saved_by": "Design Ravi",
+        },
+    )
+    check("a layout saves", layout.status_code == 200, layout.text[:200])
+    layout = layout.json()
+    check("it is named from the layout when nothing is typed", layout["name"] == "5 × 2 on 65T", layout["name"])
+    check("the rotation survives the round trip", layout["rotated"] is True)
+    check("and so does the whole project payload", layout["payload"]["press"]["maxWidth"] == 650,
+          str(layout["payload"]))
+    check("it names the order it belongs to", layout["order_number"] == "SO-4")
+    check("and the KLD behind it", layout["kld_number"] == die_now["kld_number"])
+
+    check(
+        "an unknown kind is refused",
+        client.post("/vault/layouts", json={"kind": "freehand"}).status_code == 400,
+    )
+    check(
+        "a layout on an order that is not there is refused",
+        client.post("/vault/layouts", json={"order_id": "nope"}).status_code == 400,
+    )
+
+    listed = client.get(f"/vault/layouts?order_id={job2['id']}").json()["items"]
+    check("the order's layouts list", len(listed) == 1, str(len(listed)))
+    board = client.get("/vault/reports/orders").json()
+    check(
+        "the board counts saved layouts per order",
+        next(i["layout_count"] for i in board["items"] if i["order_number"] == "SO-4") == 1,
+    )
+
+    section("19. The plate follows from the layout, nothing retyped")
+    made = client.post(f"/vault/layouts/{layout['id']}/plate", json={"plate_number": "PL-FROM-LAYOUT"})
+    check("a plate is made from the layout", made.status_code == 200, made.text[:200])
+    made = made.json()
+    check("it takes the repeat", abs(made["repeat_mm"] - 206.375) < 1e-9, str(made["repeat_mm"]))
+    check("and the web width", abs(made["web_width"] - 322) < 1e-9)
+    check("and the colour count", made["colours"] == 4)
+    check("its cost is what the optimiser worked out", made["actual_cost_minor"] == 345554)
+    check("the order's artwork is on it", len(made["lines"]) == 1, str(made["lines"]))
+    check("so it carries that artwork's name", made["artwork_label"] == artworks[2]["name"], str(made["artwork_label"]))
+    check("and the order's KLD", made["kld_label"] == die_now["kld_number"], str(made["kld_label"]))
+    check("it is billed to the order's customer", made["charge_customer_id"] == customer["id"])
+
+    refreshed = client.get(f"/vault/layouts/{layout['id']}").json()
+    check("the layout now points at its plate", refreshed["plate_id"] == made["id"])
+    check("and names it", refreshed["plate_number"] == "PL-FROM-LAYOUT")
+    reorder = client.get(f"/vault/orders/{job2['id']}").json()
+    check("the order picked the plate up too", reorder["plate_id"] == made["id"])
+
+    check(
+        "making a second plate from the same layout is refused",
+        client.post(f"/vault/layouts/{layout['id']}/plate").status_code == 409,
+    )
+    check(
+        "an order holding layouts cannot be deleted",
+        client.delete(f"/vault/orders/{job2['id']}").status_code == 409,
+    )
+
+    check(
+        "and the plate cannot be deleted while the order points at it",
+        client.delete(f"/vault/plates/{made['id']}").status_code == 409,
+    )
+    client.put(
+        f"/vault/orders/{job2['id']}",
+        json={"order_number": "SO-4", "customer_id": customer["id"], "artwork_id": artworks[2]["id"],
+              "die_id": die["id"], "quantity": 100000, "status": "crm_raised"},
+    )
+    check("once unhooked it goes", client.delete(f"/vault/plates/{made['id']}").status_code == 200)
+    unhooked = client.get(f"/vault/layouts/{layout['id']}").json()
+    check("but the layout is still there", unhooked["plate_id"] is None, str(unhooked["plate_id"]))
+    check("so a fresh plate can be made from it", client.post(f"/vault/layouts/{layout['id']}/plate").status_code == 200)
+
+    section("20. The charge maths on its own")
     check("no policy given means the full cost is billed",
           vault.plate_charge({"actual_cost_minor": 1000})["cost_to_customer_minor"] == 1000)
     check("percent defaults to half when no figure is set",
