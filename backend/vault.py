@@ -281,6 +281,14 @@ SCHEMA = [
         created_at VARCHAR(64)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS vault_settings (
+        name VARCHAR(64) PRIMARY KEY,
+        value TEXT,
+        updated_by VARCHAR(128),
+        updated_at VARCHAR(64)
+    )
+    """,
 ]
 
 # Columns added after the first release. CREATE TABLE IF NOT EXISTS leaves an
@@ -497,6 +505,79 @@ class Layout(BaseModel):
 
 
 LAYOUT_KINDS = {"step_repeat", "gang", "plate_nest"}
+
+# What the shop pays, kept in one place so two people quoting the same job
+# cannot quote it off two different plate rates.
+DEFAULT_RATES = {
+    "colours": 4,
+    "sets": 1,
+    "plateRatePerCm2": 1.3,
+    "film": {
+        "mode": "per_kg",
+        "ratePerKg": 220.0,
+        "ratePerSqm": 0.0,
+        "micron": 50.0,
+        "density": 1.4,  # PVC
+        "material": "PVC",
+    },
+}
+
+
+class Rates(BaseModel):
+    colours: Optional[int] = None
+    sets: Optional[int] = None
+    plateRatePerCm2: Optional[float] = None
+    film: Optional[dict] = None
+    updated_by: Optional[str] = None
+
+
+def clean_rates(body: dict) -> dict:
+    """
+    Sanity-check the shop's rates before they become everybody's rates.
+
+    A typo here does not produce one wrong quote, it produces every wrong quote
+    until somebody notices, so the obviously impossible is refused outright
+    rather than stored and used.
+    """
+    out = json.loads(json.dumps(DEFAULT_RATES))  # a fresh copy, not the shared dict
+    film_in = body.get("film") or {}
+    film = out["film"]
+
+    def number(value, fallback, low, high, label, required=False):
+        if value is None or value == "":
+            # Leaving out a rate the whole shop quotes from must not quietly
+            # become a default — that is a wrong number nobody typed.
+            if required:
+                raise HTTPException(status_code=400, detail=f"{label} is needed")
+            return fallback
+        try:
+            n = float(value)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"{label} must be a number")
+        if not (low <= n <= high):
+            raise HTTPException(status_code=400, detail=f"{label} must be between {low} and {high}")
+        return n
+
+    out["colours"] = int(number(body.get("colours"), 4, 1, 16, "Colours"))
+    out["sets"] = int(number(body.get("sets"), 1, 1, 20, "Plate sets"))
+    out["plateRatePerCm2"] = number(body.get("plateRatePerCm2"), 1.3, 0.01, 100, "Plate rate", required=True)
+
+    mode = (film_in.get("mode") or "per_kg").strip()
+    if mode not in ("per_kg", "per_sqm"):
+        raise HTTPException(status_code=400, detail="Film must be priced per_kg or per_sqm")
+    film["mode"] = mode
+    film["ratePerKg"] = number(film_in.get("ratePerKg"), 0.0, 0, 100000, "Film rate per kg")
+    film["ratePerSqm"] = number(film_in.get("ratePerSqm"), 0.0, 0, 100000, "Film rate per m2")
+    film["micron"] = number(film_in.get("micron"), 50.0, 1, 2000, "Film thickness")
+    film["density"] = number(film_in.get("density"), 1.4, 0.1, 25, "Film density")
+    film["material"] = str(film_in.get("material") or "")[:32]
+
+    # The rate that is actually going to be used has to be a real one.
+    if mode == "per_kg" and film["ratePerKg"] <= 0:
+        raise HTTPException(status_code=400, detail="Film priced per kg needs a rate per kg")
+    if mode == "per_sqm" and film["ratePerSqm"] <= 0:
+        raise HTTPException(status_code=400, detail="Film priced per m2 needs a rate per m2")
+    return out
 
 
 class PlateFromLayout(BaseModel):
@@ -974,6 +1055,50 @@ def build(database, require_admin, upload_dir: Path):
             },
         )
         return await get_order(order_id, True)
+
+    # ---- the shop's rates -------------------------------------------------
+
+    @router.get("/settings/rates")
+    async def get_rates(_: bool = Depends(require_admin)):
+        row = await database.fetch_one(
+            "SELECT * FROM vault_settings WHERE name = 'rates'"
+        )
+        if not row:
+            return {"rates": DEFAULT_RATES, "updated_by": None, "updated_at": None, "set": False}
+        try:
+            rates = json.loads(row["value"])
+        except (TypeError, ValueError):
+            rates = DEFAULT_RATES
+        return {
+            "rates": rates,
+            "updated_by": row["updated_by"],
+            "updated_at": row["updated_at"],
+            "set": True,
+        }
+
+    @router.put("/settings/rates")
+    async def put_rates(body: Rates, _: bool = Depends(require_admin)):
+        rates = clean_rates(body.model_dump())
+        row = {
+            "name": "rates",
+            "value": json.dumps(rates),
+            "updated_by": (body.updated_by or "").strip()[:128] or None,
+            "updated_at": _now(),
+        }
+        existing = await database.fetch_one("SELECT name FROM vault_settings WHERE name = 'rates'")
+        if existing:
+            await database.execute(
+                "UPDATE vault_settings SET value = :value, updated_by = :updated_by, "
+                "updated_at = :updated_at WHERE name = :name",
+                row,
+            )
+        else:
+            await database.execute(
+                "INSERT INTO vault_settings (name, value, updated_by, updated_at) "
+                "VALUES (:name, :value, :updated_by, :updated_at)",
+                row,
+            )
+        return await get_rates(True)
 
     # ---- saved optimiser layouts ------------------------------------------
 

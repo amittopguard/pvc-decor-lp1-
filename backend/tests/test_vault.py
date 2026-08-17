@@ -664,7 +664,59 @@ def run(client):
     check("but the layout is still there", unhooked["plate_id"] is None, str(unhooked["plate_id"]))
     check("so a fresh plate can be made from it", client.post(f"/vault/layouts/{layout['id']}/plate").status_code == 200)
 
-    section("20. The charge maths on its own")
+    section("20. One set of rates for the whole shop")
+    fresh = client.get("/vault/settings/rates").json()
+    check("rates come back before anyone has set them", fresh["set"] is False, str(fresh))
+    check("with PVC at 1.4", abs(fresh["rates"]["film"]["density"] - 1.4) < 1e-9)
+
+    stored = client.put(
+        "/vault/settings/rates",
+        json={"colours": 6, "sets": 1, "plateRatePerCm2": 1.25,
+              "film": {"mode": "per_kg", "ratePerKg": 235, "micron": 50, "density": 1.4, "material": "PVC"},
+              "updated_by": "Amit"},
+    )
+    check("rates save", stored.status_code == 200, stored.text[:200])
+    stored = stored.json()
+    check("and read back", abs(stored["rates"]["plateRatePerCm2"] - 1.25) < 1e-9)
+    check("with who set them", stored["updated_by"] == "Amit")
+    check("and are marked as set", stored["set"] is True)
+
+    again = client.get("/vault/settings/rates").json()
+    check("a second read gets the same figures", again["rates"]["film"]["ratePerKg"] == 235)
+    check("saving twice updates rather than duplicates",
+          client.put("/vault/settings/rates",
+                     json={"plateRatePerCm2": 1.35,
+                           "film": {"mode": "per_kg", "ratePerKg": 240, "micron": 50, "density": 1.4}}
+                     ).json()["rates"]["plateRatePerCm2"] == 1.35)
+
+    # A typo here would not make one wrong quote, it would make every wrong quote.
+    bad = [
+        ("a plate rate of zero", {"plateRatePerCm2": 0, "film": {"mode": "per_kg", "ratePerKg": 220}}),
+        ("a negative plate rate", {"plateRatePerCm2": -2, "film": {"mode": "per_kg", "ratePerKg": 220}}),
+        ("a plate rate off by a factor of a thousand", {"plateRatePerCm2": 1300, "film": {"mode": "per_kg", "ratePerKg": 220}}),
+        ("a plate rate that is not a number", {"plateRatePerCm2": "cheap", "film": {"mode": "per_kg", "ratePerKg": 220}}),
+        ("an unknown pricing mode", {"plateRatePerCm2": 1.3, "film": {"mode": "per_tonne", "ratePerKg": 220}}),
+        ("per-kg film with no rate per kg", {"plateRatePerCm2": 1.3, "film": {"mode": "per_kg", "ratePerKg": 0}}),
+        ("per-m2 film with no rate per m2", {"plateRatePerCm2": 1.3, "film": {"mode": "per_sqm", "ratePerSqm": 0}}),
+        ("zero thickness", {"plateRatePerCm2": 1.3, "film": {"mode": "per_kg", "ratePerKg": 220, "micron": 0}}),
+        ("an impossible density", {"plateRatePerCm2": 1.3, "film": {"mode": "per_kg", "ratePerKg": 220, "density": 40}}),
+        ("more colours than the press has decks",
+         {"colours": 40, "plateRatePerCm2": 1.3, "film": {"mode": "per_kg", "ratePerKg": 220}}),
+        # The failure this caught in the browser: a field left out is not a
+        # licence to invent one.
+        ("no plate rate at all", {"film": {"mode": "per_kg", "ratePerKg": 220}}),
+        ("a plate rate sent as null", {"plateRatePerCm2": None, "film": {"mode": "per_kg", "ratePerKg": 220}}),
+    ]
+    for name, payload in bad:
+        # Our own checks answer 400; a value the model cannot even parse is a 422.
+        status = client.put("/vault/settings/rates", json=payload).status_code
+        check(f"{name} is refused", status in (400, 422), f"{name} got {status}")
+
+    survived = client.get("/vault/settings/rates").json()
+    check("and none of it got stored", abs(survived["rates"]["plateRatePerCm2"] - 1.35) < 1e-9,
+          str(survived["rates"]["plateRatePerCm2"]))
+
+    section("21. The charge maths on its own")
     check("no policy given means the full cost is billed",
           vault.plate_charge({"actual_cost_minor": 1000})["cost_to_customer_minor"] == 1000)
     check("percent defaults to half when no figure is set",

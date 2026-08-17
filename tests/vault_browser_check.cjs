@@ -488,6 +488,52 @@ const waitFor = async (url, tries = 60) => {
   check("the saved layout lists against its order", /SO-1/.test(savedRow), savedRow);
   check("with the cost it was ranked on", /₹/.test(savedRow), savedRow);
 
+  console.log("\nThe shop's rates, not this browser's");
+  let ratesFoot = await page.locator("main").innerText();
+  check(
+    "before anyone sets them the panel says so",
+    /no rates on file yet/i.test(ratesFoot),
+    ratesFoot.slice(ratesFoot.indexOf("SHOP RATES"), ratesFoot.indexOf("SHOP RATES") + 300)
+  );
+
+  await page.locator("[aria-label='Plate rate per square centimetre']").fill("1.25");
+  await page.locator("[aria-label='Film rate per kilo']").fill("235");
+  await tap("button:has-text(\"Save as the shop's\")");
+  await page.waitForFunction(() => /The shop's rates:/.test(document.querySelector("main")?.innerText || ""), null, {
+    timeout: 20000,
+  });
+  await hideToasts();
+  ratesFoot = await page.locator("main").innerText();
+  check("once saved the panel names them as the shop's", /The shop's rates:/.test(ratesFoot), ratesFoot.slice(0, 200));
+  check("with the plate rate that was entered", /1\.25\/cm²/.test(ratesFoot), ratesFoot.slice(0, 300));
+
+  // A rate the whole shop would quote off cannot be nonsense.
+  await page.locator("[aria-label='Plate rate per square centimetre']").fill("0");
+  await tap("button:has-text(\"Save as the shop's\")");
+  await page.waitForTimeout(1200);
+  const stillGood = await page.evaluate(async () => {
+    const token = localStorage.getItem("kdipl_admin_token");
+    const res = await fetch("/api/vault/settings/rates", { headers: { Authorization: `Bearer ${token}` } });
+    return (await res.json()).rates.plateRatePerCm2;
+  });
+  check("a plate rate of zero never becomes the shop's", stillGood === 1.25, `${stillGood}`);
+
+  // Coming back with a different local rate, the shop's must win on arrival.
+  await page.evaluate(() => {
+    const raw = JSON.parse(window.localStorage.getItem("flexo.project.v1"));
+    raw.costing.plateRatePerCm2 = 9.99;
+    window.localStorage.setItem("flexo.project.v1", JSON.stringify(raw));
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector("h1:has-text('Flexo Label Optimizer')");
+  await page.waitForFunction(
+    () => document.querySelector("[aria-label='Plate rate per square centimetre']")?.value === "1.25",
+    null,
+    { timeout: 20000 }
+  );
+  const adopted = await page.locator("[aria-label='Plate rate per square centimetre']").inputValue();
+  check("a stale local rate is replaced by the shop's on arrival", adopted === "1.25", adopted);
+
   console.log("\nA gang plan saves too, but cannot become one plate");
   // Ten SKUs that cannot share one plate — the case that started all this.
   await page.evaluate(() => {

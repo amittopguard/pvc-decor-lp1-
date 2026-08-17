@@ -1,6 +1,9 @@
-import React from "react";
-import { CheckCell, NumberCell, Panel } from "@/components/cutlist/fields";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Download, Loader2, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { CheckCell, NumberCell, Panel, ToolButton } from "@/components/cutlist/fields";
 import { FILM_DENSITY, filmCostPerSqm, gsm, sqmPerKg, formatPaise } from "@/lib/costing/costing";
+import { errorText, getShopRates, hasToken, putShopRates } from "@/lib/vault/api";
 
 const FILMS = Object.keys(FILM_DENSITY);
 
@@ -8,14 +11,95 @@ const FILMS = Object.keys(FILM_DENSITY);
  * What the shop pays. Without these the optimiser can only rank layouts by the
  * material each label uses, which quietly favours the widest web — and the
  * widest web is also the most expensive plate.
+ *
+ * The rates live in the vault rather than in this browser, so two people
+ * quoting the same job cannot quote it off two different plate rates.
  */
 export default function ShopRates({ costing, onChange }) {
+  const [shop, setShop] = useState(null);
+  const [busy, setBusy] = useState(false);
   const set = (patch) => onChange({ ...costing, ...patch });
   const setFilm = (patch) => onChange({ ...costing, film: { ...costing.film, ...patch } });
   const film = costing.film;
   const weight = gsm(film.micron, film.density);
   const perSqm = filmCostPerSqm(film);
   const yieldPerKg = sqmPerKg(film.micron, film.density);
+
+  const load = useCallback(async () => {
+    if (!hasToken()) return null;
+    try {
+      const data = await getShopRates();
+      setShop(data);
+      return data;
+    } catch {
+      // Not signed in, or the vault is down; the page still works on its own rates.
+      return null;
+    }
+  }, []);
+
+  // The effect below runs once, but it must apply the rates to whatever the
+  // panel holds at that moment rather than to a closed-over first render.
+  const latest = useRef({ costing, onChange });
+  latest.current = { costing, onChange };
+
+  const apply = useCallback((rates) => {
+    const { costing: current, onChange: change } = latest.current;
+    change({ ...current, ...rates, film: { ...current.film, ...rates.film } });
+  }, []);
+
+  // Take the shop's rates on arrival, so nobody quotes off a stale local copy
+  // without meaning to. Once only — this pulls the shop's rates in, it does not
+  // keep overwriting what is being typed.
+  useEffect(() => {
+    let cancelled = false;
+    load().then((data) => {
+      if (!cancelled && data?.set) apply(data.rates);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [load, apply]);
+
+  const publish = async () => {
+    setBusy(true);
+    try {
+      // A zero is a value, not a missing field — sending it as null would let
+      // the server fall back to a default nobody typed.
+      const number = (v) => {
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n : null;
+      };
+      const saved = await putShopRates({
+        colours: number(costing.colours),
+        sets: number(costing.sets),
+        plateRatePerCm2: number(costing.plateRatePerCm2),
+        film: {
+          mode: film.mode,
+          ratePerKg: number(film.ratePerKg) ?? 0,
+          ratePerSqm: number(film.ratePerSqm) ?? 0,
+          micron: number(film.micron) ?? 0,
+          density: number(film.density) ?? 0,
+          material: film.material || "",
+        },
+      });
+      setShop(saved);
+      toast.success("These are now the shop's rates.");
+    } catch (e) {
+      toast.error(errorText(e, "Could not save the shop's rates."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const adopt = async () => {
+    const data = await load();
+    if (!data?.set) {
+      toast.error("The shop has no rates on file yet.");
+      return;
+    }
+    apply(data.rates);
+    toast.success("Using the shop's rates.");
+  };
 
   return (
     <Panel
@@ -134,6 +218,42 @@ export default function ShopRates({ costing, onChange }) {
             : "Priced per square metre, thickness changes the weight but not the rate."}
         </p>
       </div>
+
+      <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2">
+        <span className="text-xs text-slate-500">
+          {!hasToken() ? (
+            <>
+              Signed out — these rates stay in this browser.{" "}
+              <a href="/vault" className="text-orange-700 underline-offset-2 hover:underline">
+                Sign in to the vault
+              </a>{" "}
+              to use the shop's.
+            </>
+          ) : shop?.set ? (
+            <>
+              The shop's rates: {formatPaise(shop.rates.plateRatePerCm2)}/cm² plates,{" "}
+              {shop.rates.film.mode === "per_kg"
+                ? `${formatPaise(shop.rates.film.ratePerKg)}/kg`
+                : `${formatPaise(shop.rates.film.ratePerSqm)}/m²`}{" "}
+              film
+              {shop.updated_by ? ` — set by ${shop.updated_by}` : ""}
+            </>
+          ) : (
+            "The shop has no rates on file yet — save these to set them for everybody."
+          )}
+        </span>
+        {hasToken() && (
+          <div className="flex items-center gap-2">
+            <ToolButton onClick={adopt} disabled={busy}>
+              <Download className="h-4 w-4" /> Use the shop's
+            </ToolButton>
+            <ToolButton onClick={publish} disabled={busy}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Save as the
+              shop's
+            </ToolButton>
+          </div>
+        )}
+      </footer>
     </Panel>
   );
 }

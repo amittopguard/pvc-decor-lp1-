@@ -16,9 +16,10 @@ const qty = (n) => (n ? Number(n).toLocaleString("en-IN") : "—");
  * the customer was charged for it, and what is still owed back on the plates
  * that are refundable.
  */
-export default function PlateCharges({ data }) {
+export default function PlateCharges({ data, rates }) {
   if (!data) return null;
   const { items = [], totals = {}, refunds_due: refunds = [], absorbed = [] } = data;
+  const r = rates?.rates;
 
   const cards = [
     { label: "Cost to company", value: totals.cost_to_company_minor },
@@ -29,6 +30,21 @@ export default function PlateCharges({ data }) {
 
   return (
     <Panel title="Plate charges" subtitle="Cost to company against cost to customer, plate by plate">
+      {r && (
+        <p className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          The shop quotes at <strong>₹{r.plateRatePerCm2}/cm²</strong> for plates and{" "}
+          <strong>
+            {r.film.mode === "per_kg" ? `₹${r.film.ratePerKg}/kg` : `₹${r.film.ratePerSqm}/m²`}
+          </strong>{" "}
+          for {r.film.material || "film"} at {r.film.micron} micron.
+          {rates.updated_by ? ` Set by ${rates.updated_by}.` : ""}
+          {!rates.set && " Nobody has set these yet — the optimiser is using its defaults."}{" "}
+          <a href="/flexo" className="text-orange-700 underline-offset-2 hover:underline">
+            Change them in the optimiser
+          </a>
+          .
+        </p>
+      )}
       <dl className="grid grid-cols-2 gap-3 border-b border-slate-100 p-3 md:grid-cols-4">
         {cards.map((c) => (
           <div key={c.label} className="min-w-0">

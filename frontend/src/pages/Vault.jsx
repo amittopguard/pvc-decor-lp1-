@@ -23,6 +23,7 @@ import {
   errorText,
   formatMoney,
   getPlate,
+  getShopRates,
   hasToken,
   listArtworkFiles,
   listLayouts,
@@ -195,6 +196,7 @@ export default function Vault() {
   const [repCost, setRepCost] = useState(null);
   const [repOrders, setRepOrders] = useState(null);
   const [repCharges, setRepCharges] = useState(null);
+  const [shopRates, setShopRates] = useState(null);
 
   useEffect(() => {
     document.title = "Artwork & plate vault";
@@ -223,13 +225,14 @@ export default function Vault() {
       setPlates(p);
       setOrders(o);
       setLayouts(y);
-      const [ra, rk, rr, rc, ro, rp] = await Promise.all([
+      const [ra, rk, rr, rc, ro, rp, sr] = await Promise.all([
         reportArtworks(),
         reportKld(),
         reportReconciliation(),
         reportCost(),
         reportOrders(),
         reportPlateCharges(),
+        getShopRates(),
       ]);
       setRepArtworks(ra);
       setRepKld(rk);
@@ -237,6 +240,7 @@ export default function Vault() {
       setRepCost(rc);
       setRepOrders(ro);
       setRepCharges(rp);
+      setShopRates(sr);
     } catch (e) {
       if (e?.response?.status === 401) {
         localStorage.removeItem(TOKEN_KEY);
@@ -609,7 +613,7 @@ export default function Vault() {
 
         {tab === "reports" && (
           <>
-            <PlateCharges data={repCharges} />
+            <PlateCharges data={repCharges} rates={shopRates} />
             <VaultReports artworks={repArtworks} kld={repKld} reconciliation={repRecon} cost={repCost} />
           </>
         )}

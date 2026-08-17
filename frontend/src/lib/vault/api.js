@@ -29,6 +29,9 @@ export const updateOrder = (id, body) => unwrap(adminApi.put(`/vault/orders/${id
 export const setOrderStatus = (id, body) => unwrap(adminApi.patch(`/vault/orders/${id}/status`, body));
 export const deleteOrder = (id) => unwrap(adminApi.delete(`/vault/orders/${id}`));
 
+export const getShopRates = () => unwrap(adminApi.get("/vault/settings/rates"));
+export const putShopRates = (body) => unwrap(adminApi.put("/vault/settings/rates", body));
+
 export const listLayouts = (params = {}) => {
   const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
   return unwrap(adminApi.get(`/vault/layouts${query ? `?${query}` : ""}`)).then((d) => d.items || []);
