@@ -22,6 +22,8 @@ from datetime import datetime, timezone, timedelta
 
 import resend
 
+import vault
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
@@ -552,6 +554,9 @@ async def admin_seed(_: bool = Depends(require_admin)):
 
     return {"seeded": seeded}
 
+# The artwork and plate vault lives behind the same admin token.
+api_router.include_router(vault.build(database, require_admin, UPLOAD_DIR))
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -591,6 +596,7 @@ async def startup():
                 data JSON
             )
         """)
+        await vault.ensure_schema(database)
         logger.info("Database connected and tables ready")
     except Exception as e:
         logger.error(f"Database startup error: {e}")

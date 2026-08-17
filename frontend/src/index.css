@@ -113,3 +113,12 @@ html { scroll-behavior: smooth; }
 /* Hide scrollbar utility */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+
+/* Cut list optimizer — printed cutting sheets */
+@media print {
+  html, body { background: #ffffff; }
+  .cutlist-page { background: #ffffff; }
+  .cutlist-page article { page-break-inside: avoid; break-inside: avoid; margin-bottom: 12mm; }
+  .cutlist-page section { break-inside: avoid; }
+  @page { margin: 12mm; }
+}
