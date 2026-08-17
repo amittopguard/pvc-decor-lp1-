@@ -230,6 +230,33 @@ const check = (name, ok, detail) => {
   check("the results say the grouping is now the operator's", /moved these SKUs yourself/i.test(movedText),
     movedText.slice(0, 200));
 
+  // Dragging the label out of the diagram — the thing anyone actually reaches
+  // for, driven with real pointer events so touch is covered by the same path.
+  const plate2 = page.locator("article[data-plate='2']");
+  const beforeDiagram = await laneNames();
+  const grabbable = page.locator("article[data-plate='1'] svg g[data-sku]").first();
+  check("labels in the diagram are grabbable", (await grabbable.count()) > 0, "no grabbable rect found");
+
+  const from = await grabbable.boundingBox();
+  const to = await plate2.boundingBox();
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 + 40, from.y + from.height / 2 + 40, { steps: 5 });
+  const carried = await page.locator("div.fixed.z-50").count();
+  check("the label follows the pointer while dragging", carried > 0, `${carried} floating labels`);
+  await page.mouse.move(to.x + to.width / 2, to.y + 60, { steps: 10 });
+  await page.mouse.up();
+  await page.waitForTimeout(1500);
+  await hideToasts();
+
+  const afterDiagram = await laneNames();
+  check(
+    "dragging a label off the diagram moves it",
+    JSON.stringify(afterDiagram) !== JSON.stringify(beforeDiagram),
+    `before ${JSON.stringify(beforeDiagram)} after ${JSON.stringify(afterDiagram)}`
+  );
+  check("and the floating label is gone once dropped", (await page.locator("div.fixed.z-50").count()) === 0);
+
   // And the drag path itself — the handlers, driven as a browser drives them.
   const dragResult = await page.evaluate(() => {
     const rows = document.querySelectorAll("article tbody tr");

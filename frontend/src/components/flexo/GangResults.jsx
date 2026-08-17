@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, GripVertical, RotateCcw, Rows3, X } from "lucide-react";
 import WebDiagram from "./WebDiagram";
 import { colorForIndex } from "@/components/cutlist/SheetDiagram";
@@ -16,6 +16,10 @@ function Stat({ label, value, sub, tone = "default" }) {
   );
 }
 
+/** Which plate a SKU is currently on, so a drop back onto it does nothing. */
+const plateOf = (result, skuId) =>
+  result.plates.find((p) => p.plan.lanes.some((l) => String(l.id) === String(skuId)))?.index ?? null;
+
 /** Lay one plate out across the web: each SKU's lanes sit side by side. */
 export function gangRects(plan, margin, gapAcross, colorOf) {
   const usable = plan.webWidth - 2 * margin;
@@ -27,6 +31,7 @@ export function gangRects(plan, margin, gapAcross, colorOf) {
       const pitchY = lane.height + lane.gapAround;
       for (let r = 0; r < lane.around; r++) {
         rects.push({
+          id: lane.id,
           x,
           y: lane.gapAround / 2 + r * pitchY,
           w: lane.width,
@@ -42,7 +47,20 @@ export function gangRects(plan, margin, gapAcross, colorOf) {
   return rects;
 }
 
-function PlateCard({ plate, total, plateCount, unit, margin, gapAcross, colorOf, move, dragging, setDragging }) {
+function PlateCard({
+  plate,
+  total,
+  plateCount,
+  unit,
+  margin,
+  gapAcross,
+  colorOf,
+  move,
+  dragging,
+  setDragging,
+  grab,
+  hovered,
+}) {
   const [showOptions, setShowOptions] = useState(false);
   const [dropping, setDropping] = useState(false);
   const plan = plate.plan;
@@ -51,8 +69,9 @@ function PlateCard({ plate, total, plateCount, unit, margin, gapAcross, colorOf,
 
   return (
     <article
+      data-plate={plate.index}
       className={`border bg-white dark:bg-slate-900 transition-colors print:break-inside-avoid ${
-        dropping ? "border-orange-500 ring-2 ring-orange-500/30" : "border-slate-200 dark:border-slate-700"
+        dropping || hovered ? "border-orange-500 ring-2 ring-orange-500/30" : "border-slate-200 dark:border-slate-700"
       }`}
       onDragOver={move ? (e) => { e.preventDefault(); setDropping(true); } : undefined}
       onDragLeave={move ? () => setDropping(false) : undefined}
@@ -90,7 +109,14 @@ function PlateCard({ plate, total, plateCount, unit, margin, gapAcross, colorOf,
       </header>
 
       <div className="p-3">
-        <WebDiagram webWidth={plan.webWidth} repeat={plan.repeat} rects={rects} unit={unit} margin={margin} />
+        <WebDiagram
+          webWidth={plan.webWidth}
+          repeat={plan.repeat}
+          rects={rects}
+          unit={unit}
+          margin={margin}
+          onGrab={grab}
+        />
       </div>
 
       <div className="relative overflow-x-auto border-t border-slate-100 dark:border-slate-800">
@@ -232,6 +258,48 @@ function PlateCard({ plate, total, plateCount, unit, margin, gapAcross, colorOf,
 
 export default function GangResults({ result, unit, margin, gapAcross, colorOf, onMove, onReset }) {
   const [dragging, setDragging] = useState(null);
+  // Dragging a label in the diagram, which is the thing anyone looks at and so
+  // the thing they reach for. SVG will not do HTML5 drag reliably and it does
+  // nothing at all by touch, so this is done with pointer events: they cover
+  // mouse, pen and finger with one path.
+  const [carry, setCarry] = useState(null); // { id, name, x, y, over }
+
+  const grab = useCallback(
+    (skuId, event) => {
+      if (!onMove) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const name =
+        result.plates.flatMap((p) => p.plan.lanes).find((l) => String(l.id) === String(skuId))?.name || "SKU";
+      let over = null;
+
+      const plateUnder = (x, y) => {
+        const el = document.elementFromPoint(x, y);
+        const card = el && el.closest ? el.closest("article[data-plate]") : null;
+        return card ? Number(card.getAttribute("data-plate")) : null;
+      };
+
+      const onMoveEvt = (e) => {
+        over = plateUnder(e.clientX, e.clientY);
+        setCarry({ id: skuId, name, x: e.clientX, y: e.clientY, over });
+      };
+      const onUp = (e) => {
+        window.removeEventListener("pointermove", onMoveEvt);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onUp);
+        setCarry(null);
+        const target = plateUnder(e.clientX, e.clientY);
+        // Dropped back where it started, or outside every plate: nothing to do.
+        if (target && target !== plateOf(result, skuId)) onMove(skuId, target);
+      };
+
+      setCarry({ id: skuId, name, x: event.clientX, y: event.clientY, over });
+      window.addEventListener("pointermove", onMoveEvt);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onUp);
+    },
+    [onMove, result]
+  );
   if (!result) {
     return (
       <div className="flex min-h-[320px] flex-col items-center justify-center border border-dashed border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 p-8 text-center">
@@ -349,11 +417,26 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
         </div>
       )}
 
+      {carry && (
+        <div
+          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-1/2 border border-orange-500 bg-orange-100 px-2 py-1 text-xs font-semibold text-orange-900 shadow-lg dark:bg-orange-950 dark:text-orange-200"
+          style={{ left: carry.x, top: carry.y }}
+        >
+          {carry.name}
+          <span className="ml-1.5 font-normal opacity-70">
+            {carry.over && carry.over !== plateOf(result, carry.id)
+              ? `→ plate ${carry.over}`
+              : "drop on a plate"}
+          </span>
+        </div>
+      )}
+
       {onMove && (
         <p className="px-1 text-xs text-slate-500 dark:text-slate-400 print:hidden">
-          Use the <strong>move</strong> box on any row to send a SKU to another plate, to one of its own, or off
-          the run — or drag the row onto another plate if you prefer. Either way the plates are worked out again
-          from scratch: the grouping is yours, the layout is still solved.
+          <strong>Drag a label straight off the diagram onto another plate</strong> to move it — by mouse or by
+          finger. The <strong>move</strong> box on each row does the same, and can also give a SKU a plate of its
+          own or take it off the run. Either way the plates are worked out again from scratch: the grouping is
+          yours, the layout is still solved.
         </p>
       )}
 
@@ -370,6 +453,8 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf, 
           move={onMove}
           dragging={dragging}
           setDragging={setDragging}
+          grab={onMove ? grab : null}
+          hovered={!!carry && carry.over === plate.index && carry.over !== plateOf(result, carry.id)}
         />
       ))}
 

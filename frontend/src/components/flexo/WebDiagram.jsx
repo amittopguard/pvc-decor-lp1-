@@ -17,6 +17,7 @@ export default function WebDiagram({
   margin = 0,
   showGhost = true,
   height = 560,
+  onGrab = null,
 }) {
   if (!webWidth || !repeat) return null;
 
@@ -66,8 +67,18 @@ export default function WebDiagram({
 
   const row = (dy, opacity) => (
     <g opacity={opacity}>
-      {rects.map((r, i) => (
-        <g key={`${dy}-${i}`}>
+      {rects.map((r, i) => {
+        // The handler goes on the group, not the rect: the label's text sits on
+        // top of the rect and would otherwise swallow the press.
+        const grabbable = onGrab && opacity === 1 && r.id;
+        return (
+        <g
+          key={`${dy}-${i}`}
+          data-sku={grabbable ? r.id : undefined}
+          // touchAction none, or a touch drag scrolls the page instead.
+          style={grabbable ? { cursor: "grab", touchAction: "none" } : undefined}
+          onPointerDown={grabbable ? (e) => onGrab(r.id, e) : undefined}
+        >
           <rect
             x={r.x}
             y={r.y + dy}
@@ -86,7 +97,8 @@ export default function WebDiagram({
           </rect>
           {opacity === 1 && label(r, dy)}
         </g>
-      ))}
+        );
+      })}
     </g>
   );
 
