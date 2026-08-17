@@ -12,7 +12,8 @@ import { CheckCell, IconButton, NumberCell, Panel, TextCell, ToolButton } from "
 import { Lock, Plus, RotateCw, Trash2 } from "lucide-react";
 import ShopRates, { DEFAULT_COSTING } from "@/components/flexo/ShopRates";
 import SaveToOrder from "@/components/flexo/SaveToOrder";
-import { getLayout } from "@/lib/vault/api";
+import { errorText, getLayout, getShopRates, hasToken, putShopRates } from "@/lib/vault/api";
+
 import { layoutCostFn, formatPaise } from "@/lib/costing/costing";
 import { solveStepRepeat, getPitch } from "@/lib/flexo/layout";
 import { solvePlateSets } from "@/lib/flexo/plates";
@@ -20,6 +21,23 @@ import { exportGangReport } from "@/lib/flexo/report";
 import { optimize } from "@/lib/cutlist/optimizer";
 import { convert, getUnit } from "@/lib/cutlist/units";
 import { emptyPart, emptyStock, newId } from "@/lib/cutlist/project";
+
+/** Where this page keeps the shop's rates: in the vault, behind the admin token. */
+const VAULT_RATES = {
+  available: hasToken,
+  load: getShopRates,
+  save: putShopRates,
+  errorText: (e) => errorText(e, "Could not save the shop's rates."),
+  signInHint: (
+    <>
+      Signed out — these rates stay in this browser.{" "}
+      <a href="/vault" className="text-orange-700 underline-offset-2 hover:underline">
+        Sign in to the vault
+      </a>{" "}
+      to use the shop's.
+    </>
+  ),
+};
 
 const STORAGE_KEY = "flexo.project.v1";
 const FLEXO_UNITS = ["mm", "in"];
@@ -619,7 +637,7 @@ export default function Flexo() {
                 </label>
               </Panel>
               <PressSettings press={project.press} unit={unit} onChange={(press) => patch({ press })} newWeb={newWeb} />
-              <ShopRates costing={project.costing} onChange={(costing) => patch({ costing })} />
+              <ShopRates costing={project.costing} onChange={(costing) => patch({ costing })} store={VAULT_RATES} />
               <SaveToOrder draft={layoutDraft} onOpen={openLayout} />
             </>
           )}
@@ -628,7 +646,7 @@ export default function Flexo() {
             <>
               <SkuTable skus={project.skus} unit={unit} colorOf={colorOf} onChange={(skus) => patch({ skus })} />
               <PressSettings press={project.press} unit={unit} onChange={(press) => patch({ press })} newWeb={newWeb} />
-              <ShopRates costing={project.costing} onChange={(costing) => patch({ costing })} />
+              <ShopRates costing={project.costing} onChange={(costing) => patch({ costing })} store={VAULT_RATES} />
               <SaveToOrder draft={layoutDraft} onOpen={openLayout} />
             </>
           )}

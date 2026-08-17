@@ -3,7 +3,6 @@ import { Download, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { CheckCell, NumberCell, Panel, ToolButton } from "@/components/cutlist/fields";
 import { FILM_DENSITY, filmCostPerSqm, gsm, sqmPerKg, formatPaise } from "@/lib/costing/costing";
-import { errorText, getShopRates, hasToken, putShopRates } from "@/lib/vault/api";
 
 const FILMS = Object.keys(FILM_DENSITY);
 
@@ -12,10 +11,17 @@ const FILMS = Object.keys(FILM_DENSITY);
  * material each label uses, which quietly favours the widest web — and the
  * widest web is also the most expensive plate.
  *
- * The rates live in the vault rather than in this browser, so two people
- * quoting the same job cannot quote it off two different plate rates.
+ * Pass a `store` and the rates live wherever it puts them rather than in this
+ * browser, so two people quoting the same job cannot quote it off two different
+ * plate rates. Without one the panel still works, on this browser's rates
+ * alone, and says so.
+ *
+ *   store.available()  is there somewhere to keep them, and are we allowed in
+ *   store.load()       -> { rates, updated_by, set } or null
+ *   store.save(rates)  -> the same shape back
+ *   store.errorText(e) one line for a failure
  */
-export default function ShopRates({ costing, onChange }) {
+export default function ShopRates({ costing, onChange, store = null }) {
   const [shop, setShop] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (patch) => onChange({ ...costing, ...patch });
@@ -25,17 +31,19 @@ export default function ShopRates({ costing, onChange }) {
   const perSqm = filmCostPerSqm(film);
   const yieldPerKg = sqmPerKg(film.micron, film.density);
 
+  const shared = !!store && store.available();
+
   const load = useCallback(async () => {
-    if (!hasToken()) return null;
+    if (!store || !store.available()) return null;
     try {
-      const data = await getShopRates();
+      const data = await store.load();
       setShop(data);
       return data;
     } catch {
-      // Not signed in, or the vault is down; the page still works on its own rates.
+      // Signed out, or the store is down; the page still works on its own rates.
       return null;
     }
-  }, []);
+  }, [store]);
 
   // The effect below runs once, but it must apply the rates to whatever the
   // panel holds at that moment rather than to a closed-over first render.
@@ -69,7 +77,7 @@ export default function ShopRates({ costing, onChange }) {
         const n = parseFloat(v);
         return Number.isFinite(n) ? n : null;
       };
-      const saved = await putShopRates({
+      const saved = await store.save({
         colours: number(costing.colours),
         sets: number(costing.sets),
         plateRatePerCm2: number(costing.plateRatePerCm2),
@@ -85,7 +93,7 @@ export default function ShopRates({ costing, onChange }) {
       setShop(saved);
       toast.success("These are now the shop's rates.");
     } catch (e) {
-      toast.error(errorText(e, "Could not save the shop's rates."));
+      toast.error(store.errorText ? store.errorText(e) : "Could not save the shop's rates.");
     } finally {
       setBusy(false);
     }
@@ -221,14 +229,8 @@ export default function ShopRates({ costing, onChange }) {
 
       <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2">
         <span className="text-xs text-slate-500">
-          {!hasToken() ? (
-            <>
-              Signed out — these rates stay in this browser.{" "}
-              <a href="/vault" className="text-orange-700 underline-offset-2 hover:underline">
-                Sign in to the vault
-              </a>{" "}
-              to use the shop's.
-            </>
+          {!shared ? (
+            store?.signInHint || "These rates stay in this browser."
           ) : shop?.set ? (
             <>
               The shop's rates: {formatPaise(shop.rates.plateRatePerCm2)}/cm² plates,{" "}
@@ -242,7 +244,7 @@ export default function ShopRates({ costing, onChange }) {
             "The shop has no rates on file yet — save these to set them for everybody."
           )}
         </span>
-        {hasToken() && (
+        {shared && (
           <div className="flex items-center gap-2">
             <ToolButton onClick={adopt} disabled={busy}>
               <Download className="h-4 w-4" /> Use the shop's
