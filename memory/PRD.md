@@ -1,7 +1,11 @@
 # KDIPL — PVC Decor Film & Laminates — B2B Landing Page
 
 ## Original Problem Statement
-KDIPL manufactures PVC Decor Film for PVC membrane doors (vacuum press process) and is launching PVC Laminates 1mm & 3mm for acrylic sheets. Target audiences in priority order:
+KDIPL manufactures PVC Decor Film for PVC membrane doors (vacuum press process). Target audiences in priority order:
+
+> **Correction (2026-08):** the original brief also claimed PVC Laminates 1mm & 3mm were launching
+> for acrylic sheets. The user has since confirmed **PVC Laminates are not manufactured at all**.
+> The confirmed product list and units of sale are recorded in `memory/product-units.md`.
 1. Prospect Distributors
 2. Importers ("stop importing — buy from us")
 3. Manufacturers who consume the film
