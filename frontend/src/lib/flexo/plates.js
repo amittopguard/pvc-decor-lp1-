@@ -78,6 +78,7 @@ export function solvePlateSets({
   pitch = 3.175,
   plateTolerance,
   maxSkusPerPlate = 8,
+  cost = null,
   timeBudgetMs = 8000,
 } = {}) {
   const started = Date.now();
@@ -185,28 +186,53 @@ export function solvePlateSets({
     };
   }
 
-  // Each plate costs a plate and a setup, so fewest plates leads; material and
-  // then overrun break the tie.
-  evaluated.sort(
-    (a, b) => a.plates - b.plates || a.materialArea - b.materialArea || a.overrun - b.overrun
-  );
-  const winner = evaluated[0];
-
   const ordered = list.reduce((s, x) => s + Math.floor(num(x.qty)), 0);
+
+  // With rates in hand the choice is a money one. Splitting the job over one
+  // more plate nearly always saves film — every plate is sized to its own
+  // group — but it buys a whole extra set of plates, one per colour, and that
+  // is usually the larger number. Counting plates alone gets the same answer
+  // only by accident.
+  let rankedBy = "plates";
+  if (typeof cost === "function") {
+    for (const e of evaluated) {
+      const priced = e.solved.map((r) => cost(r.best) || {});
+      e.plateCost = priced.reduce((s, p) => s + (p.plateCost || 0), 0);
+      e.materialCost = priced.reduce((s, p) => s + (p.materialCost || 0), 0);
+      e.totalCost = e.plateCost + e.materialCost;
+      e.costPerThousand = ordered > 0 ? (e.totalCost / ordered) * 1000 : 0;
+    }
+    if (evaluated.every((e) => Number.isFinite(e.totalCost) && e.totalCost > 0)) rankedBy = "cost";
+  }
+
+  if (rankedBy === "cost") {
+    evaluated.sort((a, b) => a.totalCost - b.totalCost || a.plates - b.plates || a.overrun - b.overrun);
+  } else {
+    // Without rates, each plate still costs a plate and a setup, so fewest
+    // plates leads and material then overrun break the tie.
+    evaluated.sort(
+      (a, b) => a.plates - b.plates || a.materialArea - b.materialArea || a.overrun - b.overrun
+    );
+  }
+  const winner = evaluated[0];
   const printed = winner.solved.reduce(
     (s, r) => s + r.best.lanes.reduce((t, l) => t + l.printed, 0),
     0
   );
 
+  const platePrice = rankedBy === "cost" ? winner.solved.map((r) => cost(r.best) || {}) : null;
+
   return {
     ok: true,
     errors: [],
+    rankedBy,
     strategy: winner.partition.strategy,
     plates: winner.solved.map((res, i) => ({
       index: i + 1,
       plan: res.best,
       options: res.options,
       skuCount: res.best.lanes.length,
+      cost: platePrice ? platePrice[i] : null,
     })),
     totals: {
       plates: winner.plates,
@@ -218,12 +244,20 @@ export function solvePlateSets({
       materialArea: winner.materialArea,
       webLength: round(winner.webLength, 2),
       revolutions: winner.solved.reduce((s, r) => s + r.best.revolutions, 0),
+      plateCost: winner.plateCost ?? null,
+      materialCost: winner.materialCost ?? null,
+      totalCost: winner.totalCost ?? null,
+      costPerThousand: winner.costPerThousand ?? null,
     },
     alternatives: evaluated.slice(0, 8).map((e) => ({
       plates: e.plates,
       strategy: e.partition.strategy,
       materialArea: e.materialArea,
       overrun: e.overrun,
+      plateCost: e.plateCost ?? null,
+      materialCost: e.materialCost ?? null,
+      totalCost: e.totalCost ?? null,
+      costPerThousand: e.costPerThousand ?? null,
       groups: e.partition.groups.map((g) => g.map((s) => s.name || s.id)),
     })),
     elapsedMs: Date.now() - started,

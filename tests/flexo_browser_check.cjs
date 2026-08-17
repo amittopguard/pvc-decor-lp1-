@@ -192,6 +192,17 @@ const check = (name, ok, detail) => {
   check("all ten SKUs appear across the plates", skuRows === 10, `${skuRows} rows`);
   const splitNotice = await page.$("text=will not fit one plate");
   check("the split is explained", !!splitNotice);
+  const gangMain = await page.locator("main").innerText();
+  check(
+    "the split is costed, not just counted",
+    /PER 1000[\s\S]{0,20}₹/i.test(gangMain) && /plates \+ ₹/.test(gangMain),
+    gangMain.slice(0, 400)
+  );
+  check(
+    "and the reason for the split is the plate bill",
+    /every extra plate buys another set/.test(gangMain),
+    gangMain.slice(gangMain.indexOf("will not fit"), gangMain.indexOf("will not fit") + 260)
+  );
   await page.screenshot({ path: path.join(SHOTS, "flexo-plates-split.png"), fullPage: true });
 
   const [download] = await Promise.all([
@@ -207,6 +218,11 @@ const check = (name, ok, detail) => {
   const pageCount = parseInt((pdfText.match(/\/Count (\d+)/) || [])[1] || "0", 10);
   check("it has a page per plate plus the summary", pageCount === plateHeads.length + 1, `${pageCount} pages for ${plateHeads.length} plates`);
   check("the report names the labels", pdfText.includes("Label 1"), "SKU names missing from the PDF");
+  check(
+    "and carries the money the plan was ranked on",
+    /PER 1000/.test(pdfText) && /JOB TOTAL/.test(pdfText) && /Rs /.test(pdfText),
+    "cost summary missing from the PDF"
+  );
 
   console.log("\nPlate nesting");
   await tap("button:has-text('Plate nesting')");

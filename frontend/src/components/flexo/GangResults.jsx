@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronDown, ChevronRight, Rows3 } from "lucide-react";
 import WebDiagram from "./WebDiagram";
 import { colorForIndex } from "@/components/cutlist/SheetDiagram";
 import { formatArea, formatLength, formatPercent, getUnit } from "@/lib/cutlist/units";
+import { formatPaise } from "@/lib/costing/costing";
 
 function Stat({ label, value, sub, tone = "default" }) {
   const tones = { default: "text-slate-900", good: "text-emerald-600", warn: "text-orange-600", bad: "text-red-600" };
@@ -193,10 +194,11 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf }
 
   const u = getUnit(unit);
   const t = result.totals;
+  const priced = result.rankedBy === "cost";
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      <div className={`grid grid-cols-2 gap-2 sm:grid-cols-3 ${priced ? "xl:grid-cols-7" : "xl:grid-cols-6"}`}>
         <Stat
           label="Plates needed"
           value={t.plates}
@@ -216,6 +218,13 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf }
           value={`${(t.webLength / (unit === "mm" ? 1000 : 1)).toFixed(unit === "mm" ? 0 : 1)} ${unit === "mm" ? "m" : u.label}`}
           sub={`${t.revolutions.toLocaleString()} turns total`}
         />
+        {priced && (
+          <Stat
+            label="Per 1000"
+            value={formatPaise(t.costPerThousand)}
+            sub={`${formatPaise(t.plateCost)} plates + ${formatPaise(t.materialCost)} film`}
+          />
+        )}
         <Stat label="Grouped by" value={result.plates.length > 1 ? "split" : "one plate"} sub={result.strategy} />
       </div>
 
@@ -227,7 +236,10 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf }
           </div>
           <p className="text-xs">
             At one lane each they are wider than the press can print, so the job runs as {t.plates} separate plate sets.
-            The split was chosen as “{result.strategy}”, using the fewest plates that fit.
+            The split was chosen as “{result.strategy}”,{" "}
+            {priced
+              ? `the cheapest at ${formatPaise(t.totalCost)} all in — every extra plate buys another set, one per colour.`
+              : "using the fewest plates that fit."}
           </p>
         </div>
       )}
@@ -262,6 +274,8 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf }
                   <th className="px-2 py-1.5 text-right font-medium">Plates</th>
                   <th className="px-2 py-1.5 text-right font-medium">Material</th>
                   <th className="px-2 py-1.5 text-right font-medium">Overrun</th>
+                  {priced && <th className="px-2 py-1.5 text-right font-medium">Plates ₹</th>}
+                  {priced && <th className="px-2 py-1.5 text-right font-medium">₹/1000</th>}
                 </tr>
               </thead>
               <tbody>
@@ -271,6 +285,12 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf }
                     <td className="px-2 py-1 text-right tabular-nums">{alt.plates}</td>
                     <td className="px-2 py-1 text-right tabular-nums">{formatArea(alt.materialArea, unit)}</td>
                     <td className="px-2 py-1 text-right tabular-nums">{alt.overrun.toLocaleString()}</td>
+                    {priced && (
+                      <td className="px-2 py-1 text-right tabular-nums text-slate-500">{formatPaise(alt.plateCost)}</td>
+                    )}
+                    {priced && (
+                      <td className="px-2 py-1 text-right tabular-nums">{formatPaise(alt.costPerThousand)}</td>
+                    )}
                   </tr>
                 ))}
               </tbody>

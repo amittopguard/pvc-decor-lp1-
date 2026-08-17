@@ -488,6 +488,39 @@ const waitFor = async (url, tries = 60) => {
   check("the saved layout lists against its order", /SO-1/.test(savedRow), savedRow);
   check("with the cost it was ranked on", /₹/.test(savedRow), savedRow);
 
+  console.log("\nA gang plan saves too, but cannot become one plate");
+  // Ten SKUs that cannot share one plate — the case that started all this.
+  await page.evaluate(() => {
+    const skus = Array.from({ length: 10 }, (_, i) => ({
+      id: `bulk-${i}`,
+      name: `Label ${i + 1}`,
+      width: 90 + (i % 3) * 15,
+      height: 50 + (i % 4) * 10,
+      qty: 20000 + i * 6000,
+      canRotate: true,
+      enabled: true,
+    }));
+    const raw = JSON.parse(window.localStorage.getItem("flexo.project.v1"));
+    window.localStorage.setItem("flexo.project.v1", JSON.stringify({ ...raw, skus, tab: "gang" }));
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForSelector("h1:has-text('Flexo Label Optimizer')");
+  await tap("button:has-text('Calculate')");
+  await page.waitForSelector("text=Plate 1 of", { timeout: 40000 });
+  await hideToasts();
+  const gangName = await page.locator("[aria-label='Layout name']").getAttribute("placeholder");
+  check(
+    "the gang plan is offered by plate and SKU count",
+    /^[2-9]\d* plates, 10 SKUs$/.test(gangName || ""),
+    `${gangName}`
+  );
+  await page.locator("[aria-label='Save the layout to this order']").selectOption({ index: 1 });
+  await page.locator("[aria-label='Saved by']").fill("Design Meera");
+  await tap("button:has-text('Save to vault')");
+  await page.waitForSelector("tbody tr:has-text('Design Meera')", { timeout: 20000 });
+  await hideToasts();
+  check("the gang plan is listed with the rest", true);
+
   console.log("\nAnd the plate follows from it");
   await page.goto(`http://localhost:${WEB_PORT}/vault`, { waitUntil: "networkidle" });
   await page.waitForSelector("h1:has-text('Artwork & plate vault')", { timeout: 20000 });
@@ -496,12 +529,17 @@ const waitFor = async (url, tries = 60) => {
   await settle();
   await hideToasts();
   let boardText = await page.locator("main").innerText();
-  check("the board shows the layout saved from the optimiser", /1 saved layout/.test(boardText), boardText.slice(0, 400));
+  check("the board shows the layouts saved from the optimiser", /2 saved layouts/.test(boardText), boardText.slice(0, 400));
   check(
     "and lists its web and repeat",
     /layouts saved from the optimiser/i.test(boardText) && /\d+ × \d+\.\d/.test(boardText),
     boardText.slice(0, 300)
   );
+
+  // Two layouts are saved but only the step-and-repeat one has a single repeat,
+  // so only it can be turned into a plate.
+  const makeButtons = await page.locator("button:has-text('Make the plate')").count();
+  check("only the layout with one repeat offers a plate", makeButtons === 1, `${makeButtons} buttons`);
 
   await page.locator("button:has-text('Make the plate')").first().dispatchEvent("click");
   await page.waitForSelector("text=Layouts saved from the optimiser", { timeout: 25000 });

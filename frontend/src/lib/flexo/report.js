@@ -142,6 +142,16 @@ export function buildGangReport({ result, press, unit, skus, projectName = "Gang
     ["Material", area(t.materialArea, unit)],
     ["Press turns", t.revolutions.toLocaleString()],
   ];
+  // The base-14 fonts here have no rupee glyph, so money is written as Rs.
+  if (result.rankedBy === "cost") {
+    const rs = (v) => `Rs ${Math.round(v).toLocaleString("en-IN")}`;
+    summary.push(
+      ["Plates", rs(t.plateCost)],
+      ["Film", rs(t.materialCost)],
+      ["Job total", rs(t.totalCost)],
+      ["Per 1000", rs(t.costPerThousand)]
+    );
+  }
   const colW = (right - MARGIN) / 4;
   summary.forEach(([label, value], i) => {
     const cx = MARGIN + (i % 4) * colW;

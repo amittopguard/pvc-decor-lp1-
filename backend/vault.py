@@ -1062,6 +1062,13 @@ def build(database, require_admin, upload_dir: Path):
             raise HTTPException(status_code=404, detail="Not found")
         if row["plate_id"]:
             raise HTTPException(status_code=409, detail="This layout already has a plate")
+        # A gang plan spread over several plates has no single repeat, so there
+        # is no one plate to make from it.
+        if not row["repeat_mm"]:
+            raise HTTPException(
+                status_code=400,
+                detail="This layout has no single repeat to make a plate from — open it and pick one plate first.",
+            )
 
         order = None
         if row["order_id"]:

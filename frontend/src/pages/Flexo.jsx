@@ -262,6 +262,93 @@ export default function Flexo() {
   }, [project.costing, project.quantity, unit]);
 
   /**
+   * The record the save panel would write, built from whichever tab is open.
+   *
+   * A gang plan over several plates has no single repeat or cylinder, so those
+   * fields stay empty rather than being filled with the first plate's and read
+   * later as if they described the whole job.
+   */
+  const layoutDraft = useMemo(() => {
+    const shared = {
+      unit,
+      colours: parseInt(project.costing?.colours, 10) || null,
+      plate_sets: parseInt(project.costing?.sets, 10) || 1,
+      payload: {
+        label: project.label,
+        press: project.press,
+        costing: project.costing,
+        quantity: project.quantity,
+        skus: project.skus,
+        tab,
+      },
+    };
+
+    if (tab === "repeat" && repeatResult?.ok) {
+      const o = repeatResult.options[selectedRepeat] || repeatResult.best;
+      const priced = repeatResult.rankedBy === "cost";
+      return {
+        ...shared,
+        kind: "step_repeat",
+        label_width: Number(project.label.width) || null,
+        label_height: Number(project.label.height) || null,
+        quantity: parseInt(project.quantity, 10) || null,
+        web_width: o.webWidth,
+        repeat_mm: o.repeat,
+        teeth: o.teeth,
+        across: o.across,
+        around: o.around,
+        per_rev: o.perRev,
+        rotated: !!o.rotated,
+        utilisation: o.utilisation,
+        material_area: o.materialArea,
+        web_length: o.webLength,
+        revolutions: o.revolutions,
+        overrun: o.overrun,
+        plate_area_cm2: priced ? o.plateAreaCm2 : null,
+        plate_cost_minor: priced ? Math.round(o.plateCost * 100) : null,
+        material_cost_minor: priced ? Math.round(o.materialCost * 100) : null,
+        total_cost_minor: priced ? Math.round(o.totalCost * 100) : null,
+        per_thousand_minor: priced ? Math.round(o.costPerThousand * 100) : null,
+        ranked_by: repeatResult.rankedBy,
+        suggestedName: `${o.across} × ${o.around} on ${o.teeth}T`,
+        describe:
+          `${o.across} × ${o.around} on a ${o.teeth}T cylinder, ${o.webWidth} ${unit} web` +
+          (priced ? ` — ${formatPaise(o.costPerThousand)} per 1000` : ""),
+      };
+    }
+
+    if (tab === "gang" && gangResult?.ok) {
+      const t = gangResult.totals;
+      const priced = gangResult.rankedBy === "cost";
+      const single = gangResult.plates.length === 1 ? gangResult.plates[0].plan : null;
+      return {
+        ...shared,
+        kind: "gang",
+        quantity: t.ordered,
+        web_width: single ? single.webWidth : null,
+        repeat_mm: single ? single.repeat : null,
+        teeth: single ? single.teeth : null,
+        per_rev: single ? single.perRev : null,
+        utilisation: single ? single.utilisation : null,
+        material_area: t.materialArea,
+        web_length: t.webLength,
+        revolutions: t.revolutions,
+        overrun: t.overrun,
+        plate_cost_minor: priced ? Math.round(t.plateCost * 100) : null,
+        material_cost_minor: priced ? Math.round(t.materialCost * 100) : null,
+        total_cost_minor: priced ? Math.round(t.totalCost * 100) : null,
+        per_thousand_minor: priced ? Math.round(t.costPerThousand * 100) : null,
+        ranked_by: gangResult.rankedBy,
+        suggestedName: `${t.plates} plate${t.plates === 1 ? "" : "s"}, ${t.skus} SKUs`,
+        describe:
+          `${t.skus} SKUs on ${t.plates} plate${t.plates === 1 ? "" : "s"}, ${t.overrun.toLocaleString()} over` +
+          (priced ? ` — ${formatPaise(t.costPerThousand)} per 1000` : ""),
+      };
+    }
+    return null;
+  }, [tab, unit, project, repeatResult, gangResult, selectedRepeat]);
+
+  /**
    * Put a saved layout back on the page. The stored payload is the whole
    * project, so what comes back is editable input rather than a read-only
    * record of a number somebody once got.
@@ -274,15 +361,18 @@ export default function Flexo() {
     }
     setProject((prev) => ({
       ...prev,
-      tab: "repeat",
+      tab: p.tab || (layout.kind === "gang" ? "gang" : "repeat"),
       unit: layout.unit || prev.unit,
       label: { ...prev.label, ...(p.label || {}) },
       press: { ...prev.press, ...(p.press || {}) },
       costing: { ...DEFAULT_COSTING(), ...(p.costing || {}), film: { ...DEFAULT_COSTING().film, ...(p.costing?.film || {}) } },
       quantity: p.quantity ?? prev.quantity,
+      skus: p.skus?.length ? p.skus : prev.skus,
     }));
     setRepeatResult(null);
+    setGangResult(null);
     setSelectedRepeat(0);
+    setSelectedGang(0);
     toast.success(`${layout.name} loaded — press Calculate to work it out again.`);
   }, []);
 
@@ -317,12 +407,15 @@ export default function Flexo() {
           );
         } else toast.error(res.errors[0]);
       } else if (tab === "gang") {
-        const res = solvePlateSets({ ...pressArgs(), skus: project.skus });
+        const res = solvePlateSets({ ...pressArgs(), skus: project.skus, cost: costFn() });
         setGangResult(res);
         setSelectedGang(0);
         if (res.ok) {
           const p = res.totals.plates;
-          toast.success(`${p} plate${p === 1 ? "" : "s"}, ${res.totals.overrun.toLocaleString()} labels over`);
+          toast.success(
+            `${p} plate${p === 1 ? "" : "s"}, ${res.totals.overrun.toLocaleString()} labels over` +
+              (res.rankedBy === "cost" ? ` — ${formatPaise(res.totals.costPerThousand)} per 1000` : "")
+          );
         } else {
           toast.error(res.errors[0]);
         }
@@ -527,13 +620,7 @@ export default function Flexo() {
               </Panel>
               <PressSettings press={project.press} unit={unit} onChange={(press) => patch({ press })} newWeb={newWeb} />
               <ShopRates costing={project.costing} onChange={(costing) => patch({ costing })} />
-              <SaveToOrder
-                result={repeatResult}
-                selected={selectedRepeat}
-                project={project}
-                unit={unit}
-                onOpen={openLayout}
-              />
+              <SaveToOrder draft={layoutDraft} onOpen={openLayout} />
             </>
           )}
 
@@ -541,6 +628,8 @@ export default function Flexo() {
             <>
               <SkuTable skus={project.skus} unit={unit} colorOf={colorOf} onChange={(skus) => patch({ skus })} />
               <PressSettings press={project.press} unit={unit} onChange={(press) => patch({ press })} newWeb={newWeb} />
+              <ShopRates costing={project.costing} onChange={(costing) => patch({ costing })} />
+              <SaveToOrder draft={layoutDraft} onOpen={openLayout} />
             </>
           )}
 

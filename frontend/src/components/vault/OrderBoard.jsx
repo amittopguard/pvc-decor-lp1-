@@ -424,7 +424,7 @@ export default function OrderBoard({
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center justify-end gap-1">
-                        {!l.plate_id && (
+                        {!l.plate_id && l.repeat_mm && (
                           <ToolButton
                             disabled={busy}
                             onClick={async () => {

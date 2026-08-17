@@ -9,7 +9,6 @@ import {
   hasToken,
   listLayouts,
   listOrders,
-  toMinor,
   formatMoney,
 } from "@/lib/vault/api";
 
@@ -24,7 +23,7 @@ const inputClass =
  * worked out in. Saved against an order it becomes a record the whole shop can
  * see, and the plate that follows can be made straight from it.
  */
-export default function SaveToOrder({ result, selected, project, unit, onOpen }) {
+export default function SaveToOrder({ draft, onOpen }) {
   const [signedIn, setSignedIn] = useState(hasToken());
   const [orders, setOrders] = useState([]);
   const [saved, setSaved] = useState([]);
@@ -53,44 +52,16 @@ export default function SaveToOrder({ result, selected, project, unit, onOpen })
     load();
   }, [load]);
 
-  const option = result?.ok ? result.options[selected] || result.best : null;
-  const priced = result?.rankedBy === "cost";
-
   const save = async () => {
-    if (!option) return;
+    if (!draft) return;
     setBusy(true);
     try {
+      // The two display-only fields belong to this screen, not to the record.
+      const { suggestedName, describe, ...record } = draft;
       const row = await createLayout({
+        ...record,
         order_id: orderId || null,
-        kind: "step_repeat",
         name: name.trim() || null,
-        unit,
-        label_width: Number(project.label.width) || null,
-        label_height: Number(project.label.height) || null,
-        quantity: parseInt(project.quantity, 10) || null,
-        colours: parseInt(project.costing?.colours, 10) || null,
-        plate_sets: parseInt(project.costing?.sets, 10) || 1,
-        web_width: option.webWidth,
-        repeat_mm: option.repeat,
-        teeth: option.teeth,
-        across: option.across,
-        around: option.around,
-        per_rev: option.perRev,
-        rotated: !!option.rotated,
-        utilisation: option.utilisation,
-        material_area: option.materialArea,
-        web_length: option.webLength,
-        revolutions: option.revolutions,
-        overrun: option.overrun,
-        plate_area_cm2: priced ? option.plateAreaCm2 : null,
-        plate_cost_minor: priced ? toMinor(option.plateCost) : null,
-        material_cost_minor: priced ? toMinor(option.materialCost) : null,
-        total_cost_minor: priced ? toMinor(option.totalCost) : null,
-        per_thousand_minor: priced ? toMinor(option.costPerThousand) : null,
-        ranked_by: result.rankedBy,
-        // The whole project, so the layout can be reopened and recalculated
-        // rather than only read back as numbers.
-        payload: { label: project.label, press: project.press, costing: project.costing, quantity: project.quantity },
         saved_by: savedBy.trim() || null,
       });
       toast.success(`Saved as ${row.name}.`);
@@ -149,7 +120,7 @@ export default function SaveToOrder({ result, selected, project, unit, onOpen })
             aria-label="Layout name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={option ? `${option.across} × ${option.around} on ${option.teeth}T` : "Calculate first"}
+            placeholder={draft?.suggestedName || "Calculate first"}
           />
         </label>
         <label className="flex flex-col gap-1">
@@ -165,13 +136,8 @@ export default function SaveToOrder({ result, selected, project, unit, onOpen })
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3 py-2">
-        <span className="text-xs text-slate-500">
-          {option
-            ? `${option.across} × ${option.around} on a ${option.teeth}T cylinder, ${option.webWidth} ${unit} web` +
-              (priced ? ` — ${formatMoney(toMinor(option.costPerThousand))} per 1000` : "")
-            : "Calculate a layout first."}
-        </span>
-        <ToolButton variant="primary" onClick={save} disabled={busy || !option}>
+        <span className="text-xs text-slate-500">{draft?.describe || "Calculate a layout first."}</span>
+        <ToolButton variant="primary" onClick={save} disabled={busy || !draft}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save to vault
         </ToolButton>
       </div>

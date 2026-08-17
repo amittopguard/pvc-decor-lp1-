@@ -219,5 +219,88 @@ section("7. Text measurement is usable for layout");
   check("an empty string measures zero", pdf.textWidth("", 10) === 0);
 }
 
+section("8. Splitting over more plates is a money decision");
+{
+  // Ten SKUs that cannot share one plate, so the planner has a real choice
+  // about how many plates to use.
+  const skus = Array.from({ length: 10 }, (_, i) => ({
+    id: `s${i}`,
+    name: `Label ${i + 1}`,
+    width: 90 + (i % 4) * 15,
+    height: 50 + (i % 3) * 12,
+    qty: 20000 + i * 5000,
+  }));
+  const job = {
+    skus,
+    webRange: { min: 320, max: 650 },
+    cylinders: { teeth: [96, 104, 112, 120, 128, 136] },
+    gapAcross: 3,
+    gapAround: 3,
+    edgeMargin: 5,
+    pitch: 3.175,
+  };
+  const priceWith = (colours, plateRate = 1.3, filmPerSqm = 15.4) => (plan) => ({
+    plateCost: ((plan.repeat * plan.webWidth) / 100) * plateRate * colours,
+    materialCost: (plan.materialArea / 1e6) * filmPerSqm,
+  });
+
+  const plain = solvePlateSets(job);
+  check("without rates it still ranks on plate count", plain.rankedBy === "plates", plain.rankedBy);
+  check("and reports no money", plain.totals.totalCost === null, `${plain.totals.totalCost}`);
+
+  const priced = solvePlateSets({ ...job, cost: priceWith(4) });
+  check("with rates it ranks on cost", priced.rankedBy === "cost", priced.rankedBy);
+  check("the winner is priced", priced.totals.totalCost > 0, `${priced.totals.totalCost}`);
+  check(
+    "plates plus film is the whole bill",
+    Math.abs(priced.totals.totalCost - (priced.totals.plateCost + priced.totals.materialCost)) < 1e-6
+  );
+  check(
+    "per thousand is the bill over everything ordered",
+    Math.abs(priced.totals.costPerThousand - (priced.totals.totalCost / priced.totals.ordered) * 1000) < 1e-6,
+    `${priced.totals.costPerThousand}`
+  );
+  check(
+    "each plate carries its own share",
+    priced.plates.every((p) => p.cost && p.cost.plateCost > 0),
+    JSON.stringify(priced.plates.map((p) => p.cost && Math.round(p.cost.plateCost)))
+  );
+  check(
+    "the alternatives are listed cheapest first",
+    priced.alternatives.every((a, i) => i === 0 || a.totalCost >= priced.alternatives[i - 1].totalCost - 1e-6),
+    priced.alternatives.map((a) => `${a.plates}p:${Math.round(a.totalCost)}`).join(", ")
+  );
+  check(
+    "and the winner is the cheapest of them",
+    Math.abs(priced.alternatives[0].totalCost - priced.totals.totalCost) < 1e-6
+  );
+
+  // Plates are bought per colour, so a many-colour job should never be split
+  // over more plates than a one-colour job would be.
+  const one = solvePlateSets({ ...job, cost: priceWith(1) });
+  const twelve = solvePlateSets({ ...job, cost: priceWith(12) });
+  check(
+    "twelve colours never uses more plates than one colour",
+    twelve.totals.plates <= one.totals.plates,
+    `${twelve.totals.plates} vs ${one.totals.plates}`
+  );
+
+  check(
+    "a pricing function returning nothing is ignored",
+    solvePlateSets({ ...job, cost: () => null }).rankedBy === "plates"
+  );
+
+  // Every SKU still has to be printed, whichever way the split is ranked.
+  const printedFor = (r) =>
+    r.plates.reduce((s, p) => s + p.plan.lanes.reduce((t, l) => t + l.printed, 0), 0);
+  check("the cost-ranked plan still meets every order", printedFor(priced) >= priced.totals.ordered);
+  check(
+    "and every SKU appears exactly once",
+    priced.plates.flatMap((p) => p.plan.lanes.map((l) => l.id)).sort().join(",") ===
+      skus.map((s) => s.id).sort().join(","),
+    priced.plates.flatMap((p) => p.plan.lanes.map((l) => l.id)).join(",")
+  );
+}
+
 console.log(`\n${checks - failures}/${checks} checks passed`);
 process.exit(failures === 0 ? 0 : 1);
