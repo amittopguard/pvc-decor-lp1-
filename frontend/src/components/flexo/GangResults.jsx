@@ -235,12 +235,35 @@ export default function GangResults({ result, unit, margin, gapAcross, colorOf }
             {t.skus} SKUs will not fit one plate — split across {t.plates}
           </div>
           <p className="text-xs">
-            At one lane each they are wider than the press can print, so the job runs as {t.plates} separate plate sets.
             The split was chosen as “{result.strategy}”,{" "}
             {priced
               ? `the cheapest at ${formatPaise(t.totalCost)} all in — every extra plate buys another set, one per colour.`
               : "using the fewest plates that fit."}
           </p>
+          {result.split && (
+            <p className="mt-1.5 text-xs">
+              {result.split.reason === "cylinder" ? (
+                <>
+                  Side by side they only need{" "}
+                  <strong>{formatLength(result.split.neededWidth, unit)} {u.label}</strong> of web, which the press has
+                  — but that means turning them, and turned,{" "}
+                  <strong>{result.split.driverName}</strong> runs{" "}
+                  <strong>{formatLength(result.split.neededRepeat, unit)} {u.label}</strong> down the web. That is a{" "}
+                  <strong>{result.split.neededTeeth}-tooth</strong> cylinder and the largest on this press is{" "}
+                  <strong>{result.split.biggestTeeth}T</strong> ({formatLength(result.split.biggestRepeat, unit)}{" "}
+                  {u.label}). Lying the right way up they are far too wide to share, so the job splits. Add a bigger
+                  cylinder and they go on one plate.
+                </>
+              ) : (
+                <>
+                  Even turned as narrow as they go they need{" "}
+                  <strong>{formatLength(result.split.neededWidth, unit)} {u.label}</strong> of web, and the press prints{" "}
+                  <strong>{formatLength(result.split.widest, unit)} {u.label}</strong>. A wider press, or fewer SKUs in
+                  the run, is what puts them together.
+                </>
+              )}
+            </p>
+          )}
         </div>
       )}
 

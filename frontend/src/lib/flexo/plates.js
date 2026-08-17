@@ -9,7 +9,7 @@
  */
 
 import { solveGang } from "./gang";
-import { round } from "./layout";
+import { cylinderTeeth, round } from "./layout";
 
 const EPS = 1e-6;
 
@@ -27,6 +27,56 @@ export function minimumWidth(group, gutter, margin) {
   if (!group.length) return 0;
   const lanes = group.reduce((s, sku) => s + narrowestWidth(sku), 0);
   return lanes + (group.length - 1) * gutter + 2 * margin;
+}
+
+/** The other side of the one a SKU is laid out on — what it takes down-web. */
+const alongWebAtNarrowest = (sku) =>
+  sku.canRotate !== false ? Math.max(num(sku.width), num(sku.height)) : num(sku.height);
+
+/**
+ * Why the job would not go on one plate.
+ *
+ * Adding up the short sides and finding they fit the press is the obvious
+ * thing to check, and it is what anyone looking at a split asks first. But
+ * turning a label to make it narrow puts its long side down the web, and the
+ * web only comes round as fast as the cylinder: a 597 mm label turned on its
+ * side needs 600 mm of repeat, which is a 189-tooth cylinder. If the biggest
+ * cylinder on the press is smaller than that, the labels cannot be turned, and
+ * lying the right way up they are far too wide to share.
+ *
+ * So the answer is almost never "the press is too narrow" on its own — it is
+ * usually the cylinder — and saying which is the difference between a split
+ * that looks arbitrary and one you can do something about.
+ */
+export function diagnoseSplit(list, { gutter, margin, widest, teethList, pitch }) {
+  if (list.length < 2) return null;
+  const neededWidth = minimumWidth(list, gutter, margin);
+  const biggestTeeth = teethList.length ? Math.max(...teethList) : 0;
+  const biggestRepeat = biggestTeeth * pitch;
+
+  // Turned as narrow as they go, what does the longest of them need down-web?
+  const along = list.map((s) => alongWebAtNarrowest(s) + gutter);
+  const neededRepeat = Math.max(...along);
+  const neededTeeth = pitch > 0 ? Math.ceil(neededRepeat / pitch) : 0;
+  const driver = list[along.indexOf(Math.max(...along))];
+
+  const widthFits = neededWidth <= widest + EPS;
+  const repeatFits = neededRepeat <= biggestRepeat + EPS;
+
+  return {
+    neededWidth: round(neededWidth, 2),
+    widest: round(widest, 2),
+    widthFits,
+    neededRepeat: round(neededRepeat, 2),
+    neededTeeth,
+    biggestTeeth,
+    biggestRepeat: round(biggestRepeat, 2),
+    repeatFits,
+    driverName: driver?.name || driver?.id || "",
+    // The cylinder is the binding constraint when the widths would have fitted
+    // had the labels been allowed to turn.
+    reason: widthFits && !repeatFits ? "cylinder" : widthFits ? "other" : "width",
+  };
 }
 
 /** Greedily fill plates in the given order, opening a new one when full. */
@@ -226,6 +276,17 @@ export function solvePlateSets({
     ok: true,
     errors: [],
     rankedBy,
+    // Only worth explaining when the job actually did split.
+    split:
+      winner.plates > 1
+        ? diagnoseSplit(list, {
+            gutter,
+            margin,
+            widest,
+            teethList: cylinderTeeth(cylinders),
+            pitch: num(pitch) > 0 ? num(pitch) : 3.175,
+          })
+        : null,
     strategy: winner.partition.strategy,
     plates: winner.solved.map((res, i) => ({
       index: i + 1,

@@ -25,9 +25,9 @@ function load() {
     })();
     const plates = (function () {
       const { solveGang } = gang;
-      const { round } = layout;
+      const { cylinderTeeth, round } = layout;
       ${strip(path.join(LIB, "flexo", "plates.js"))}
-      return { solvePlateSets, minimumWidth };
+      return { solvePlateSets, minimumWidth, diagnoseSplit };
     })();
     const pdf = (function () {
       ${strip(path.join(LIB, "pdf", "minipdf.js"))}
@@ -41,7 +41,7 @@ function load() {
   return sandbox.module.exports;
 }
 
-const { solvePlateSets, minimumWidth, pdf } = load();
+const { solvePlateSets, minimumWidth, diagnoseSplit, pdf } = load();
 
 let failures = 0;
 let checks = 0;
@@ -300,6 +300,65 @@ section("8. Splitting over more plates is a money decision");
       skus.map((s) => s.id).sort().join(","),
     priced.plates.flatMap((p) => p.plan.lanes.map((l) => l.id)).join(",")
   );
+}
+
+section("9. A split says what is actually stopping it");
+{
+  // The real job: 597 x 191 and 372 x 133.2. Their short sides add to 324 mm,
+  // which the press prints easily — so the split looks wrong until you see
+  // that fitting them side by side means turning them.
+  const skus = [
+    { id: "a", name: "222a3825", width: 597, height: 191, qty: 2500 },
+    { id: "b", name: "SKU 1", width: 372, height: 133.2, qty: 2500 },
+  ];
+  const press = {
+    webRange: { min: 320, max: 650 },
+    gapAcross: 3,
+    gapAround: 3,
+    edgeMargin: 5,
+    pitch: 3.175,
+  };
+
+  const small = solvePlateSets({ ...press, cylinders: { teeth: [96, 104, 112, 120, 128, 136] }, skus });
+  check("with a small cylinder they cannot share a plate", small.totals.plates === 2, `${small.totals.plates}`);
+  check("and the reason given is the cylinder", small.split?.reason === "cylinder", JSON.stringify(small.split));
+  check(
+    "the width they need is inside the press",
+    small.split.neededWidth <= small.split.widest,
+    `${small.split.neededWidth} vs ${small.split.widest}`
+  );
+  check("324 of label plus gutter and margins is 337.2", Math.abs(small.split.neededWidth - 337.2) < 1e-6,
+        `${small.split.neededWidth}`);
+  check("turning the long one needs 600 mm of repeat", Math.abs(small.split.neededRepeat - 600) < 1e-6,
+        `${small.split.neededRepeat}`);
+  check("which is a 189-tooth cylinder", small.split.neededTeeth === 189, `${small.split.neededTeeth}`);
+  check("against a largest of 136T", small.split.biggestTeeth === 136, `${small.split.biggestTeeth}`);
+  check("and it names the label that drives it", small.split.driverName === "222a3825", small.split.driverName);
+
+  // Give the press a cylinder big enough and the same two go on one plate.
+  const big = solvePlateSets({ ...press, cylinders: { minTeeth: 60, maxTeeth: 200 }, skus });
+  check("a 200-tooth range puts them on one plate", big.totals.plates === 1, `${big.totals.plates}`);
+  check("and then there is nothing to explain", big.split === null, JSON.stringify(big.split));
+  check("that plate is slit to the width the diagnosis predicted",
+        Math.abs(big.plates[0].plan.webWidth - 337.2) < 0.5, `${big.plates[0].plan.webWidth}`);
+  check("with both labels turned", big.plates[0].plan.lanes.every((l) => l.rotated),
+        JSON.stringify(big.plates[0].plan.lanes.map((l) => l.rotated)));
+
+  // When the press really is too narrow, say that instead.
+  const narrow = solvePlateSets({
+    ...press,
+    webRange: { min: 320, max: 330 },
+    cylinders: { minTeeth: 60, maxTeeth: 260 },
+    skus: [
+      { id: "x", name: "X", width: 300, height: 200, qty: 1000 },
+      { id: "y", name: "Y", width: 300, height: 200, qty: 1000 },
+    ],
+  });
+  check("a genuinely narrow press is blamed on width", narrow.split?.reason === "width", JSON.stringify(narrow.split));
+
+  check("a single SKU has nothing to diagnose", diagnoseSplit([skus[0]], {
+    gutter: 3, margin: 5, widest: 650, teethList: [136], pitch: 3.175,
+  }) === null);
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
