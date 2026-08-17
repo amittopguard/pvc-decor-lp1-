@@ -19,6 +19,19 @@ export const createPlate = (body) => unwrap(adminApi.post("/vault/plates", body)
 export const updatePlate = (id, body) => unwrap(adminApi.put(`/vault/plates/${id}`, body));
 export const deletePlate = (id) => unwrap(adminApi.delete(`/vault/plates/${id}`));
 
+export const listOrders = (params = {}) => {
+  const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v)).toString();
+  return unwrap(adminApi.get(`/vault/orders${query ? `?${query}` : ""}`)).then((d) => d.items || []);
+};
+export const getOrder = (id) => unwrap(adminApi.get(`/vault/orders/${id}`));
+export const createOrder = (body) => unwrap(adminApi.post("/vault/orders", body));
+export const updateOrder = (id, body) => unwrap(adminApi.put(`/vault/orders/${id}`, body));
+export const setOrderStatus = (id, body) => unwrap(adminApi.patch(`/vault/orders/${id}/status`, body));
+export const deleteOrder = (id) => unwrap(adminApi.delete(`/vault/orders/${id}`));
+
+export const reportOrders = () => unwrap(adminApi.get("/vault/reports/orders"));
+export const reportPlateCharges = () => unwrap(adminApi.get("/vault/reports/plate-charges"));
+
 export const reportArtworks = (customerId) =>
   unwrap(adminApi.get(`/vault/reports/artworks${customerId ? `?customer_id=${customerId}` : ""}`)).then(
     (d) => d.items || []

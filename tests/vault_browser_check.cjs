@@ -126,12 +126,16 @@ const waitFor = async (url, tries = 60) => {
   page.on("console", (m) => {
     const t = m.text();
     if (m.type() !== "error") return;
-    // Aborted third-party scripts and the 409 this test deliberately provokes
-    // are expected; anything else, including other failed API calls, is not.
-    const expected = /ERR_(TUNNEL|CONNECTION|NAME|INTERNET|FAILED)|favicon|status of 409/.test(t);
+    // Aborted third-party scripts and the 409 and 400 this test deliberately
+    // provokes are expected; anything else, including other failed API calls, is not.
+    const expected = /ERR_(TUNNEL|CONNECTION|NAME|INTERNET|FAILED)|favicon|status of (400|409)/.test(t);
     if (!expected) errors.push(`console: ${t.slice(0, 200)}`);
   });
   const tap = (sel) => page.locator(sel).first().dispatchEvent("click");
+  // A reload disables the header Refresh button, and while it is disabled the
+  // action buttons are too — so wait for it before driving anything.
+  const settle = () =>
+    page.waitForFunction(() => !document.querySelector("header button[disabled]"), null, { timeout: 25000 });
   const hideToasts = () =>
     page.addStyleTag({ content: '[data-sonner-toaster],section[aria-label^="Notifications"]{display:none !important}' });
 
@@ -250,8 +254,140 @@ const waitFor = async (url, tries = 60) => {
   await hideToasts();
   const plateRow = await page.locator("tbody tr:has-text('PL-001')").first().innerText();
   check("the plate saves with its artwork count", plateRow.includes("3"), plateRow);
-  check("the plate shows the vendor and payer", plateRow.includes("Delhi Plates") && /customer/i.test(plateRow), plateRow);
+  check("the plate shows the vendor", plateRow.includes("Delhi Plates"), plateRow);
+  check(
+    "the plate carries its artwork name and reference KLD",
+    plateRow.includes("Label AW-1") && plateRow.includes("KLD-101"),
+    plateRow
+  );
+  check(
+    "and both sides of its cost — charged in full by default",
+    (plateRow.match(/₹12,000/g) || []).length === 2,
+    plateRow
+  );
   await page.screenshot({ path: path.join(SHOTS, "vault-plates.png"), fullPage: true });
+
+  console.log("\nA refundable plate, charged and then credited back");
+  await tap("button:has-text('New plate')");
+  await page.waitForSelector("text=Artworks on this plate");
+  await page.locator("[aria-label='Plate number']").fill("PL-REF");
+  await page.locator("[aria-label='Plate KLD die']").selectOption({ label: "KLD-101" });
+  await page.locator("[aria-label='Plate actual cost']").fill("4000");
+  await page.locator("[aria-label='Plate charging policy']").selectOption("refundable");
+  await page.waitForTimeout(250);
+  await page.locator("[aria-label='Refund the plate after this quantity']").fill("100000");
+  await page.locator("[aria-label='Plate charged to customer']").selectOption({ label: "Acme Foods" });
+  await page.locator("select[aria-label='Add artwork to plate']").selectOption({ label: "AW-1 — Label AW-1" });
+  await page.waitForTimeout(200);
+  let plateFoot = await page.locator("main").innerText();
+  check(
+    "a refundable plate is billed in full up front",
+    /Cost to customer[\s\S]{0,30}₹4,000/.test(plateFoot),
+    plateFoot.slice(plateFoot.indexOf("Cost to company"), plateFoot.indexOf("Cost to company") + 160)
+  );
+  await tap("button:has-text('Save plate')");
+  await page.waitForSelector("text=PL-REF", { timeout: 20000 });
+  await hideToasts();
+
+  await tap("button:has-text('New plate')");
+  await page.waitForSelector("text=Artworks on this plate");
+  await page.locator("[aria-label='Plate number']").fill("PL-HALF");
+  await page.locator("[aria-label='Plate actual cost']").fill("4000");
+  await page.locator("[aria-label='Plate charging policy']").selectOption("percent");
+  await page.waitForTimeout(250);
+  await page.locator("[aria-label='Share of the plate charged']").fill("50");
+  await page.waitForTimeout(250);
+  plateFoot = await page.locator("main").innerText();
+  check(
+    "charging half bills half and leaves half with us",
+    /Cost to customer[\s\S]{0,30}₹2,000/.test(plateFoot) && /Net to company[\s\S]{0,30}₹2,000/.test(plateFoot),
+    plateFoot.slice(plateFoot.indexOf("Cost to company"), plateFoot.indexOf("Cost to company") + 200)
+  );
+  await tap("button:has-text('Cancel')");
+  await page.waitForTimeout(400);
+
+  console.log("\nCRM raises an order, design picks it up");
+  await tap("button:has-text('Orders')");
+  await page.waitForTimeout(500);
+  await tap("button:has-text('New order')");
+  await page.waitForTimeout(300);
+  await page.locator("[aria-label='Order number *']").fill("SO-1");
+  await page.locator("[aria-label='Customer']").selectOption({ label: "Acme Foods" });
+  await page.locator("[aria-label='Quantity']").fill("60000");
+  await page.locator("[aria-label='Plate']").selectOption({ label: "PL-REF" });
+  await page.locator("[aria-label='Raised by (CRM)']").fill("CRM Anita");
+  await tap("button:has-text('Save order')");
+  await page.waitForSelector("tbody tr:has-text('SO-1')", { timeout: 20000 });
+  await settle();
+  await hideToasts();
+  let orderRow = await page.locator("tbody tr:has-text('SO-1')").first().innerText();
+  check("the order starts with CRM", /CRM raised/.test(orderRow), orderRow);
+
+  // Every stage change reloads the whole vault, so wait for the row's own badge
+  // to catch up rather than guessing at a delay.
+  const advanceOrder = async (order, stage) => {
+    await page
+      .locator(`tbody tr:has-text('${order}') button:has-text('${stage}')`)
+      .first()
+      .dispatchEvent("click");
+    await page.waitForFunction(
+      ([o, s]) => {
+        const row = [...document.querySelectorAll("tbody tr")].find((r) => r.innerText.includes(o));
+        const badge = row?.querySelector("td:nth-child(6) span");
+        return !!badge && badge.innerText.trim() === s;
+      },
+      [order, stage],
+      { timeout: 25000 }
+    );
+    await settle();
+    await hideToasts();
+  };
+
+  // Design cannot sign off until an artwork is attached — the button walks the
+  // order forward one stage at a time.
+  await advanceOrder("SO-1", "With design");
+  orderRow = await page.locator("tbody tr:has-text('SO-1')").first().innerText();
+  check("design takes it up", /With design/.test(orderRow), orderRow);
+  await page.locator("tbody tr:has-text('SO-1') button:has-text('Design done')").first().dispatchEvent("click");
+  await page
+    .waitForSelector("text=Attach an artwork", { timeout: 10000 })
+    .catch(() => {});
+  const refused = await page.locator("main").innerText();
+  check(
+    "design cannot sign off without an artwork",
+    /Attach an artwork/.test(refused),
+    refused.slice(0, 200)
+  );
+
+  await page.locator("tbody tr:has-text('SO-1') button:has-text('SO-1')").first().dispatchEvent("click");
+  await page.waitForTimeout(400);
+  await page.locator("[aria-label='Artwork']").selectOption({ index: 1 });
+  await tap("button:has-text('Save order')");
+  await page.waitForTimeout(600);
+  await settle();
+  await hideToasts();
+  for (const stage of ["Design done", "Plate ordered", "Running"]) {
+    await advanceOrder("SO-1", stage);
+  }
+  orderRow = await page.locator("tbody tr:has-text('SO-1')").first().innerText();
+  check("with an artwork attached the order runs", /Running/.test(orderRow), orderRow);
+
+  console.log("\nA repeat order keeps its original's plate");
+  await page.locator("tbody tr:has-text('SO-1') button[title='Raise a repeat of this order']").dispatchEvent("click");
+  await page.waitForTimeout(400);
+  await page.locator("[aria-label='Quantity']").fill("50000");
+  await tap("button:has-text('Save order')");
+  await page.waitForSelector("tbody tr:has-text('SO-1-R1')", { timeout: 20000 });
+  await settle();
+  await hideToasts();
+  const repeatRow = await page.locator("tbody tr:has-text('SO-1-R1')").first().innerText();
+  check("the repeat names the order it repeats", /repeat of SO-1/.test(repeatRow), repeatRow);
+  check("and inherits the plate", /PL-REF/.test(repeatRow), repeatRow);
+  // The repeat inherited the original's artwork, so it walks straight through.
+  for (const stage of ["With design", "Design done", "Plate ordered", "Running"]) {
+    await advanceOrder("SO-1-R1", stage);
+  }
+  await page.screenshot({ path: path.join(SHOTS, "vault-orders.png"), fullPage: true });
 
   console.log("\nReports");
   await tap("button:has-text('Reports')");
@@ -262,6 +398,16 @@ const waitFor = async (url, tries = 60) => {
   check("the KLD report counts the patched artworks", /KLD-101[\s\S]{0,120}3 artworks/.test(body), "");
   check("plate spend is reported", body.includes("₹12,000"), "");
   check("reconciliation reports everything clean", /Everything reconciles/.test(body), body.slice(0, 200));
+  check(
+    "the charge report splits company from customer",
+    /cost to company/i.test(body) && /charged to customers/i.test(body),
+    body.slice(0, 200)
+  );
+  check(
+    "110,000 run off a 100,000 plate puts the refund on the board",
+    /passed the refund quantity/.test(body) && /PL-REF/.test(body),
+    body.slice(body.indexOf("Plate charges"), body.indexOf("Plate charges") + 400)
+  );
   await page.screenshot({ path: path.join(SHOTS, "vault-reports.png"), fullPage: true });
 
   console.log("\nLive geometry scan");

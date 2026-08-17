@@ -7,11 +7,15 @@ import RecordTable from "@/components/vault/RecordTable";
 import PlateEditor from "@/components/vault/PlateEditor";
 import VaultReports from "@/components/vault/VaultReports";
 import GeometryScan from "@/components/vault/GeometryScan";
+import OrderBoard from "@/components/vault/OrderBoard";
+import PlateCharges from "@/components/vault/PlateCharges";
 import {
   TOKEN_KEY,
+  createOrder,
   createPlate,
   createRecord,
   deleteArtworkFile,
+  deleteOrder,
   deletePlate,
   deleteRecord,
   downloadWithToken,
@@ -19,18 +23,24 @@ import {
   getPlate,
   hasToken,
   listArtworkFiles,
+  listOrders,
   listPlates,
   listRecords,
   reportArtworks,
   reportCost,
   reportKld,
+  reportOrders,
+  reportPlateCharges,
   reportReconciliation,
+  setOrderStatus,
+  updateOrder,
   updatePlate,
   updateRecord,
   uploadArtworkFile,
 } from "@/lib/vault/api";
 
 const TABS = [
+  { id: "orders", label: "Orders" },
   { id: "artworks", label: "Artwork" },
   { id: "plates", label: "Plates" },
   { id: "dies", label: "KLD & moulds" },
@@ -172,10 +182,14 @@ export default function Vault() {
   const [editingPlate, setEditingPlate] = useState(null);
   const [openArtwork, setOpenArtwork] = useState(null);
 
+  const [orders, setOrders] = useState([]);
+
   const [repArtworks, setRepArtworks] = useState([]);
   const [repKld, setRepKld] = useState([]);
   const [repRecon, setRepRecon] = useState(null);
   const [repCost, setRepCost] = useState(null);
+  const [repOrders, setRepOrders] = useState(null);
+  const [repCharges, setRepCharges] = useState(null);
 
   useEffect(() => {
     document.title = "Artwork & plate vault";
@@ -184,7 +198,7 @@ export default function Vault() {
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [m, c, v, d, mo, a, p] = await Promise.all([
+      const [m, c, v, d, mo, a, p, o] = await Promise.all([
         listRecords("moulders"),
         listRecords("customers"),
         listRecords("vendors"),
@@ -192,6 +206,7 @@ export default function Vault() {
         listRecords("moulds"),
         listRecords("artworks"),
         listPlates(),
+        listOrders(),
       ]);
       setMoulders(m);
       setCustomers(c);
@@ -200,16 +215,21 @@ export default function Vault() {
       setMoulds(mo);
       setArtworks(a);
       setPlates(p);
-      const [ra, rk, rr, rc] = await Promise.all([
+      setOrders(o);
+      const [ra, rk, rr, rc, ro, rp] = await Promise.all([
         reportArtworks(),
         reportKld(),
         reportReconciliation(),
         reportCost(),
+        reportOrders(),
+        reportPlateCharges(),
       ]);
       setRepArtworks(ra);
       setRepKld(rk);
       setRepRecon(rr);
       setRepCost(rc);
+      setRepOrders(ro);
+      setRepCharges(rp);
     } catch (e) {
       if (e?.response?.status === 401) {
         localStorage.removeItem(TOKEN_KEY);
@@ -303,6 +323,37 @@ export default function Vault() {
       </header>
 
       <main className="mx-auto max-w-[1600px] space-y-4 p-4">
+        {tab === "orders" && (
+          <OrderBoard
+            orders={orders}
+            board={repOrders}
+            customers={customers}
+            artworks={artworks}
+            dies={dies}
+            plates={plates}
+            busy={loading}
+            onCreate={async (body) => {
+              await createOrder(body);
+              await loadAll();
+              toast.success("Order raised.");
+            }}
+            onUpdate={async (id, body) => {
+              await updateOrder(id, body);
+              await loadAll();
+              toast.success("Order updated.");
+            }}
+            onStatus={async (id, body) => {
+              await setOrderStatus(id, body);
+              await loadAll();
+            }}
+            onDelete={async (id) => {
+              await deleteOrder(id);
+              await loadAll();
+              toast.success("Order deleted.");
+            }}
+          />
+        )}
+
         {tab === "artworks" && (
           <>
             <RecordTable
@@ -360,6 +411,8 @@ export default function Vault() {
                 artworks={artworks}
                 vendors={vendors}
                 dies={dies}
+                moulds={moulds}
+                customers={customers}
                 onCancel={() => setEditingPlate(null)}
                 onSave={async (body) => {
                   if (editingPlate === "new") await createPlate(body);
@@ -390,12 +443,12 @@ export default function Vault() {
                     <thead>
                       <tr className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500">
                         <th className="px-2 py-1.5 text-left font-medium">Plate</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Vendor</th>
+                        <th className="px-2 py-1.5 text-left font-medium">Artwork</th>
                         <th className="px-2 py-1.5 text-left font-medium">KLD</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Made on</th>
+                        <th className="px-2 py-1.5 text-left font-medium">Vendor</th>
                         <th className="px-2 py-1.5 text-right font-medium">Artworks</th>
-                        <th className="px-2 py-1.5 text-right font-medium">Cost</th>
-                        <th className="px-2 py-1.5 text-left font-medium">Paid by</th>
+                        <th className="px-2 py-1.5 text-right font-medium">To company</th>
+                        <th className="px-2 py-1.5 text-right font-medium">To customer</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -405,13 +458,21 @@ export default function Vault() {
                           onClick={async () => setEditingPlate(await getPlate(p.id))}
                           className="cursor-pointer border-b border-slate-100 last:border-0 hover:bg-orange-50"
                         >
-                          <td className="px-2 py-1.5 font-medium">{p.plate_number}</td>
+                          <td className="px-2 py-1.5 font-medium">
+                            {p.plate_number}
+                            {p.made_on && <span className="block text-[11px] text-slate-500">{p.made_on}</span>}
+                          </td>
+                          <td className="px-2 py-1.5">{p.artwork_label || "—"}</td>
+                          <td className="px-2 py-1.5">{p.kld_label || p.kld_number || p.mould_code || "—"}</td>
                           <td className="px-2 py-1.5">{p.vendor_name || "—"}</td>
-                          <td className="px-2 py-1.5">{p.kld_number || "—"}</td>
-                          <td className="px-2 py-1.5">{p.made_on || "—"}</td>
                           <td className="px-2 py-1.5 text-right tabular-nums">{p.artwork_count}</td>
                           <td className="px-2 py-1.5 text-right tabular-nums">{formatMoney(p.actual_cost_minor)}</td>
-                          <td className="px-2 py-1.5 capitalize">{p.paid_by || "—"}</td>
+                          <td className="px-2 py-1.5 text-right tabular-nums">
+                            {formatMoney(p.charge?.cost_to_customer_minor)}
+                            {p.charge?.refund_outstanding_minor > 0 && (
+                              <span className="block text-[11px] text-orange-700">refund due</span>
+                            )}
+                          </td>
                         </tr>
                       ))}
                       {!plates.length && (
@@ -529,7 +590,10 @@ export default function Vault() {
         {tab === "scan" && <GeometryScan />}
 
         {tab === "reports" && (
-          <VaultReports artworks={repArtworks} kld={repKld} reconciliation={repRecon} cost={repCost} />
+          <>
+            <PlateCharges data={repCharges} />
+            <VaultReports artworks={repArtworks} kld={repKld} reconciliation={repRecon} cost={repCost} />
+          </>
         )}
       </main>
     </div>

@@ -27,8 +27,72 @@ ALLOWED_ARTWORK_EXT = {".pdf", ".ai", ".eps", ".svg", ".png", ".jpg", ".jpeg", "
 
 PAID_BY = {"us", "customer", "moulder", "vendor", "other"}
 
+# How a plate is billed on to the customer. The plate always costs the company
+# what the vendor charged; these decide how much of that is recovered.
+#   none        the customer is not charged at all — we absorb the plate
+#   full        the whole plate cost is passed on
+#   percent     a share of it is passed on (charge_percent, typically 50)
+#   refundable  charged up front, credited back once the customer has taken
+#               refund_after_qty labels off that plate
+CHARGE_POLICIES = {"none", "full", "percent", "refundable"}
+DEFAULT_CHARGE_PERCENT = 50.0
+
+# An order moves left to right. CRM raises it, design picks it up, and only
+# after design signs off does a plate get ordered.
+ORDER_STATUSES = ["crm_raised", "design_wip", "design_done", "plate_ordered", "running", "closed"]
+
 # Cost is stored in paise/cents as an integer so money never drifts.
 CURRENCY_MINOR = 100
+
+
+def plate_charge(plate: dict, delivered_qty: int = 0) -> dict:
+    """
+    Split one plate's money into what it cost us and what the customer pays.
+
+    `delivered_qty` is everything run off this plate across all its orders,
+    repeats included — that is what a refund threshold is measured against, not
+    any single order.
+    """
+    cost = int(plate.get("actual_cost_minor") or 0)
+    policy = (plate.get("charge_policy") or "full").lower()
+    if policy not in CHARGE_POLICIES:
+        policy = "full"
+
+    if policy == "none":
+        charged = 0
+    elif policy == "percent":
+        pct = plate.get("charge_percent")
+        pct = DEFAULT_CHARGE_PERCENT if pct is None else float(pct)
+        charged = int(round(cost * pct / 100.0))
+    else:  # full, refundable
+        charged = cost
+
+    # An explicit figure on the plate beats the policy — a negotiated number is
+    # still the number that was invoiced.
+    override = plate.get("charged_minor")
+    if override is not None:
+        charged = int(override)
+
+    after = int(plate.get("refund_after_qty") or 0)
+    delivered = int(delivered_qty or 0)
+    refund_ready = policy == "refundable" and after > 0 and delivered >= after
+    refund_due = charged if refund_ready else 0
+    refunded = int(plate.get("refunded_minor") or 0)
+
+    return {
+        "charge_policy": policy,
+        "cost_to_company_minor": cost,
+        "cost_to_customer_minor": charged,
+        "delivered_qty": delivered,
+        "refund_after_qty": after,
+        "refund_ready": refund_ready,
+        "refund_due_minor": refund_due,
+        "refunded_minor": refunded,
+        "refund_outstanding_minor": max(0, refund_due - refunded),
+        # What the plate finally costs the company once billing and any refund
+        # have settled.
+        "net_to_company_minor": cost - charged + refunded,
+    }
 
 
 def _now() -> str:
@@ -158,12 +222,73 @@ SCHEMA = [
         created_at VARCHAR(64)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS vault_orders (
+        id VARCHAR(64) PRIMARY KEY,
+        order_number VARCHAR(128) NOT NULL,
+        customer_id VARCHAR(64),
+        artwork_id VARCHAR(64),
+        die_id VARCHAR(64),
+        plate_id VARCHAR(64),
+        parent_order_id VARCHAR(64),
+        quantity INT,
+        colours INT,
+        ordered_on VARCHAR(64),
+        due_on VARCHAR(64),
+        status VARCHAR(32),
+        raised_by VARCHAR(128),
+        assigned_to VARCHAR(128),
+        design_notes TEXT,
+        notes TEXT,
+        created_at VARCHAR(64),
+        updated_at VARCHAR(64)
+    )
+    """,
 ]
+
+# Columns added after the first release. CREATE TABLE IF NOT EXISTS leaves an
+# existing table alone, so these have to be bolted on separately.
+ADDED_COLUMNS = {
+    "vault_plates": {
+        "mould_id": "VARCHAR(64)",
+        # What the plate says on it: the artwork it carries and the KLD it was
+        # cut against. Derived from the lines when left blank, but stored so a
+        # plate that has been physically etched keeps its own wording.
+        "artwork_label": "VARCHAR(255)",
+        "kld_label": "VARCHAR(128)",
+        "colours": "INT",
+        "plate_sets": "INT",
+        # Cost to company is actual_cost_minor. Everything below is the
+        # customer side of the same plate.
+        "charge_policy": "VARCHAR(32)",
+        "charge_percent": "DOUBLE",
+        "charge_customer_id": "VARCHAR(64)",
+        "charged_minor": "INT",
+        "refund_after_qty": "INT",
+        "refunded_minor": "INT",
+    },
+}
+
+
+async def _ensure_columns(database):
+    """
+    Add any column an older install is missing.
+
+    Probing with a SELECT rather than reading the catalogue keeps this working
+    on SQLite and MySQL alike without writing the query twice.
+    """
+    for table, columns in ADDED_COLUMNS.items():
+        for name, ddl in columns.items():
+            try:
+                await database.execute(f"SELECT {name} FROM {table} LIMIT 1")
+            except Exception:
+                await database.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
 
 
 async def ensure_schema(database):
     for statement in SCHEMA:
         await database.execute(statement)
+    await _ensure_columns(database)
 
 
 # --------------------------------------------------------------------------
@@ -241,16 +366,55 @@ class Plate(BaseModel):
     plate_number: str
     vendor_id: Optional[str] = None
     die_id: Optional[str] = None
+    mould_id: Optional[str] = None
     made_on: Optional[str] = None
     repeat_mm: Optional[float] = None
     web_width: Optional[float] = None
+    colours: Optional[int] = None
+    plate_sets: Optional[int] = None
+    # Left blank these are filled in from the plate's lines and its KLD, so the
+    # plate always carries a readable artwork name and KLD reference.
+    artwork_label: Optional[str] = None
+    kld_label: Optional[str] = None
     actual_cost_minor: Optional[int] = None
     currency: Optional[str] = "INR"
     paid_by: Optional[str] = None
     paid_by_note: Optional[str] = None
+    charge_policy: Optional[str] = None
+    charge_percent: Optional[float] = None
+    charge_customer_id: Optional[str] = None
+    charged_minor: Optional[int] = None
+    refund_after_qty: Optional[int] = None
+    refunded_minor: Optional[int] = None
     status: Optional[str] = None
     notes: Optional[str] = None
     lines: List[PlateLine] = Field(default_factory=list)
+
+
+class Order(BaseModel):
+    """A CRM order that design works against. A repeat points at its original."""
+
+    order_number: str
+    customer_id: Optional[str] = None
+    artwork_id: Optional[str] = None
+    die_id: Optional[str] = None
+    plate_id: Optional[str] = None
+    parent_order_id: Optional[str] = None
+    quantity: Optional[int] = None
+    colours: Optional[int] = None
+    ordered_on: Optional[str] = None
+    due_on: Optional[str] = None
+    status: Optional[str] = None
+    raised_by: Optional[str] = None
+    assigned_to: Optional[str] = None
+    design_notes: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class OrderStatus(BaseModel):
+    status: str
+    assigned_to: Optional[str] = None
+    design_notes: Optional[str] = None
 
 
 ENTITIES = {
@@ -305,6 +469,9 @@ def build(database, require_admin, upload_dir: Path):
             "mould_id": "vault_moulds",
             "vendor_id": "vault_vendors",
             "artwork_id": "vault_artworks",
+            "charge_customer_id": "vault_customers",
+            "plate_id": "vault_plates",
+            "parent_order_id": "vault_orders",
         }
         for field, table in refs.items():
             if field in payload and payload.get(field):
@@ -378,6 +545,59 @@ def build(database, require_admin, upload_dir: Path):
 
     # ---- plates and their lines -----------------------------------------
 
+    async def _delivered_qty(plate_id: str) -> int:
+        """Everything run off this plate, first order and repeats together."""
+        row = await database.fetch_one(
+            """
+            SELECT COALESCE(SUM(quantity), 0) AS qty FROM vault_orders
+            WHERE plate_id = :id AND status IN ('running', 'closed')
+            """,
+            {"id": plate_id},
+        )
+        return int(row["qty"] or 0) if row else 0
+
+    async def _derive_labels(plate_id: str):
+        """
+        Give the plate the wording it should physically carry: the artwork names
+        it holds and the KLD it belongs to. Only fills what was left blank, so a
+        hand-typed label is never overwritten.
+        """
+        plate = await database.fetch_one("SELECT * FROM vault_plates WHERE id = :id", {"id": plate_id})
+        if not plate:
+            return
+        updates = {}
+        if not (plate["artwork_label"] or "").strip():
+            names = await database.fetch_all(
+                """
+                SELECT COALESCE(NULLIF(a.name, ''), a.code) AS label
+                FROM vault_plate_lines l JOIN vault_artworks a ON a.id = l.artwork_id
+                WHERE l.plate_id = :id ORDER BY l.position, a.code
+                """,
+                {"id": plate_id},
+            )
+            joined = " + ".join(r["label"] for r in names if r["label"])
+            if joined:
+                updates["artwork_label"] = joined[:255]
+        if not (plate["kld_label"] or "").strip():
+            ref = await database.fetch_one(
+                """
+                SELECT d.kld_number AS die_ref, mo.mould_code AS mould_ref
+                FROM vault_plates p
+                LEFT JOIN vault_dies d ON d.id = p.die_id
+                LEFT JOIN vault_moulds mo ON mo.id = p.mould_id
+                WHERE p.id = :id
+                """,
+                {"id": plate_id},
+            )
+            label = (ref["die_ref"] or ref["mould_ref"] or "") if ref else ""
+            if label:
+                updates["kld_label"] = label[:128]
+        if updates:
+            sets = ", ".join(f"{k} = :{k}" for k in updates)
+            await database.execute(
+                f"UPDATE vault_plates SET {sets} WHERE id = :id", {"id": plate_id, **updates}
+            )
+
     async def _plate_with_lines(plate_id: str) -> dict:
         plate = await database.fetch_one("SELECT * FROM vault_plates WHERE id = :id", {"id": plate_id})
         if not plate:
@@ -392,7 +612,23 @@ def build(database, require_admin, upload_dir: Path):
             """,
             {"id": plate_id},
         )
-        return {**dict(plate), "lines": [dict(r) for r in lines]}
+        orders = await database.fetch_all(
+            """
+            SELECT o.id, o.order_number, o.quantity, o.status, o.ordered_on,
+                   o.parent_order_id, c.name AS customer_name
+            FROM vault_orders o
+            LEFT JOIN vault_customers c ON c.id = o.customer_id
+            WHERE o.plate_id = :id ORDER BY o.ordered_on, o.order_number
+            """,
+            {"id": plate_id},
+        )
+        row = dict(plate)
+        return {
+            **row,
+            "lines": [dict(r) for r in lines],
+            "orders": [dict(r) for r in orders],
+            "charge": plate_charge(row, await _delivered_qty(plate_id)),
+        }
 
     async def _write_lines(plate_id: str, lines: List[PlateLine]):
         seen = set()
@@ -418,24 +654,44 @@ def build(database, require_admin, upload_dir: Path):
     async def list_plates(_: bool = Depends(require_admin)):
         rows = await database.fetch_all(
             """
-            SELECT p.*, v.name AS vendor_name, d.kld_number,
-                   (SELECT COUNT(*) FROM vault_plate_lines l WHERE l.plate_id = p.id) AS artwork_count
+            SELECT p.*, v.name AS vendor_name, d.kld_number, mo.mould_code,
+                   (SELECT COUNT(*) FROM vault_plate_lines l WHERE l.plate_id = p.id) AS artwork_count,
+                   COALESCE((SELECT SUM(o.quantity) FROM vault_orders o
+                             WHERE o.plate_id = p.id AND o.status IN ('running', 'closed')), 0) AS delivered_qty
             FROM vault_plates p
             LEFT JOIN vault_vendors v ON v.id = p.vendor_id
             LEFT JOIN vault_dies d ON d.id = p.die_id
+            LEFT JOIN vault_moulds mo ON mo.id = p.mould_id
             ORDER BY p.made_on DESC, p.plate_number
             """
         )
-        return {"items": [dict(r) for r in rows]}
+        items = []
+        for r in rows:
+            row = dict(r)
+            items.append({**row, "charge": plate_charge(row, row.get("delivered_qty") or 0)})
+        return {"items": items}
 
     @router.get("/plates/{plate_id}")
     async def get_plate(plate_id: str, _: bool = Depends(require_admin)):
         return await _plate_with_lines(plate_id)
 
-    @router.post("/plates")
-    async def create_plate(body: Plate, _: bool = Depends(require_admin)):
+    def _check_plate_policy(body: Plate):
         if body.paid_by and body.paid_by not in PAID_BY:
             raise HTTPException(status_code=400, detail=f"paid_by must be one of {sorted(PAID_BY)}")
+        if body.charge_policy and body.charge_policy not in CHARGE_POLICIES:
+            raise HTTPException(
+                status_code=400, detail=f"charge_policy must be one of {sorted(CHARGE_POLICIES)}"
+            )
+        if body.charge_percent is not None and not (0 <= body.charge_percent <= 100):
+            raise HTTPException(status_code=400, detail="charge_percent must be between 0 and 100")
+        if body.charge_policy == "refundable" and not body.refund_after_qty:
+            raise HTTPException(
+                status_code=400, detail="A refundable plate needs the quantity after which it is refunded"
+            )
+
+    @router.post("/plates")
+    async def create_plate(body: Plate, _: bool = Depends(require_admin)):
+        _check_plate_policy(body)
         data = body.model_dump()
         lines = [PlateLine(**line) for line in data.pop("lines", [])]
         await _check_refs("plates", data)
@@ -445,6 +701,7 @@ def build(database, require_admin, upload_dir: Path):
         vals = ", ".join(f":{k}" for k in row.keys())
         await database.execute(f"INSERT INTO vault_plates ({cols}) VALUES ({vals})", row)
         await _write_lines(plate_id, lines)
+        await _derive_labels(plate_id)
         return await _plate_with_lines(plate_id)
 
     @router.put("/plates/{plate_id}")
@@ -452,20 +709,165 @@ def build(database, require_admin, upload_dir: Path):
         existing = await database.fetch_one("SELECT id FROM vault_plates WHERE id = :id", {"id": plate_id})
         if not existing:
             raise HTTPException(status_code=404, detail="Not found")
-        if body.paid_by and body.paid_by not in PAID_BY:
-            raise HTTPException(status_code=400, detail=f"paid_by must be one of {sorted(PAID_BY)}")
+        _check_plate_policy(body)
         data = body.model_dump()
         lines = [PlateLine(**line) for line in data.pop("lines", [])]
         await _check_refs("plates", data)
         sets = ", ".join(f"{k} = :{k}" for k in data.keys())
         await database.execute(f"UPDATE vault_plates SET {sets} WHERE id = :id", {"id": plate_id, **data})
         await _write_lines(plate_id, lines)
+        await _derive_labels(plate_id)
         return await _plate_with_lines(plate_id)
 
     @router.delete("/plates/{plate_id}")
     async def delete_plate(plate_id: str, _: bool = Depends(require_admin)):
+        used = await database.fetch_one(
+            "SELECT COUNT(*) AS n FROM vault_orders WHERE plate_id = :id", {"id": plate_id}
+        )
+        if used and used["n"]:
+            raise HTTPException(
+                status_code=409, detail=f"Still used by {used['n']} orders. Remove those first."
+            )
         await database.execute("DELETE FROM vault_plate_lines WHERE plate_id = :id", {"id": plate_id})
         await database.execute("DELETE FROM vault_plates WHERE id = :id", {"id": plate_id})
+        return {"ok": True}
+
+    # ---- orders: CRM raises, design works ---------------------------------
+
+    ORDER_FIELDS = [
+        "order_number", "customer_id", "artwork_id", "die_id", "plate_id", "parent_order_id",
+        "quantity", "colours", "ordered_on", "due_on", "status", "raised_by", "assigned_to",
+        "design_notes", "notes",
+    ]
+
+    ORDER_SELECT = """
+        SELECT o.*, c.name AS customer_name, a.code AS artwork_code, a.name AS artwork_name,
+               d.kld_number, p.plate_number, p.artwork_label, p.kld_label,
+               po.order_number AS parent_order_number,
+               (SELECT COUNT(*) FROM vault_orders r WHERE r.parent_order_id = o.id) AS repeat_count
+        FROM vault_orders o
+        LEFT JOIN vault_customers c ON c.id = o.customer_id
+        LEFT JOIN vault_artworks a ON a.id = o.artwork_id
+        LEFT JOIN vault_dies d ON d.id = o.die_id
+        LEFT JOIN vault_plates p ON p.id = o.plate_id
+        LEFT JOIN vault_orders po ON po.id = o.parent_order_id
+    """
+
+    @router.get("/orders")
+    async def list_orders(
+        status: Optional[str] = None,
+        customer_id: Optional[str] = None,
+        plate_id: Optional[str] = None,
+        _: bool = Depends(require_admin),
+    ):
+        clauses, params = [], {}
+        for field, value in (("o.status", status), ("o.customer_id", customer_id), ("o.plate_id", plate_id)):
+            if value:
+                key = field.split(".")[1]
+                clauses.append(f"{field} = :{key}")
+                params[key] = value
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = await database.fetch_all(
+            f"{ORDER_SELECT} {where} ORDER BY o.ordered_on DESC, o.order_number", params
+        )
+        return {"items": [dict(r) for r in rows]}
+
+    @router.get("/orders/{order_id}")
+    async def get_order(order_id: str, _: bool = Depends(require_admin)):
+        row = await database.fetch_one(f"{ORDER_SELECT} WHERE o.id = :id", {"id": order_id})
+        if not row:
+            raise HTTPException(status_code=404, detail="Not found")
+        repeats = await database.fetch_all(
+            "SELECT id, order_number, quantity, status, ordered_on FROM vault_orders "
+            "WHERE parent_order_id = :id ORDER BY ordered_on",
+            {"id": order_id},
+        )
+        return {**dict(row), "repeats": [dict(r) for r in repeats]}
+
+    def _check_order(body: Order, order_id: Optional[str] = None):
+        if body.status and body.status not in ORDER_STATUSES:
+            raise HTTPException(status_code=400, detail=f"status must be one of {ORDER_STATUSES}")
+        if order_id and body.parent_order_id == order_id:
+            raise HTTPException(status_code=400, detail="An order cannot be its own repeat")
+
+    @router.post("/orders")
+    async def create_order(body: Order, _: bool = Depends(require_admin)):
+        _check_order(body)
+        data = body.model_dump()
+        await _check_refs("orders", data)
+        # A repeat inherits the original's artwork, KLD and plate unless it says
+        # otherwise — that is the whole point of calling it a repeat.
+        if data.get("parent_order_id"):
+            parent = await database.fetch_one(
+                "SELECT * FROM vault_orders WHERE id = :id", {"id": data["parent_order_id"]}
+            )
+            for field in ("customer_id", "artwork_id", "die_id", "plate_id", "colours"):
+                if data.get(field) is None:
+                    data[field] = parent[field]
+        now = _now()
+        row = {
+            "id": _new_id(),
+            "created_at": now,
+            "updated_at": now,
+            **{f: data.get(f) for f in ORDER_FIELDS},
+        }
+        row["status"] = row["status"] or "crm_raised"
+        cols = ", ".join(row.keys())
+        vals = ", ".join(f":{k}" for k in row.keys())
+        await database.execute(f"INSERT INTO vault_orders ({cols}) VALUES ({vals})", row)
+        return await get_order(row["id"], True)
+
+    @router.put("/orders/{order_id}")
+    async def update_order(order_id: str, body: Order, _: bool = Depends(require_admin)):
+        existing = await database.fetch_one("SELECT id FROM vault_orders WHERE id = :id", {"id": order_id})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Not found")
+        _check_order(body, order_id)
+        data = body.model_dump()
+        await _check_refs("orders", data)
+        values = {f: data.get(f) for f in ORDER_FIELDS}
+        values["status"] = values["status"] or "crm_raised"
+        sets = ", ".join(f"{f} = :{f}" for f in ORDER_FIELDS)
+        await database.execute(
+            f"UPDATE vault_orders SET {sets}, updated_at = :updated_at WHERE id = :id",
+            {"id": order_id, "updated_at": _now(), **values},
+        )
+        return await get_order(order_id, True)
+
+    @router.patch("/orders/{order_id}/status")
+    async def set_order_status(order_id: str, body: OrderStatus, _: bool = Depends(require_admin)):
+        """Move one order along the CRM-to-design track without touching the rest of it."""
+        existing = await database.fetch_one("SELECT * FROM vault_orders WHERE id = :id", {"id": order_id})
+        if not existing:
+            raise HTTPException(status_code=404, detail="Not found")
+        if body.status not in ORDER_STATUSES:
+            raise HTTPException(status_code=400, detail=f"status must be one of {ORDER_STATUSES}")
+        # Design cannot sign off on an order that has no artwork on it yet.
+        if body.status in ("design_done", "plate_ordered", "running") and not existing["artwork_id"]:
+            raise HTTPException(status_code=400, detail="Attach an artwork before design can sign this off")
+        await database.execute(
+            "UPDATE vault_orders SET status = :status, assigned_to = :assigned_to, "
+            "design_notes = :design_notes, updated_at = :updated_at WHERE id = :id",
+            {
+                "id": order_id,
+                "status": body.status,
+                "assigned_to": body.assigned_to if body.assigned_to is not None else existing["assigned_to"],
+                "design_notes": body.design_notes if body.design_notes is not None else existing["design_notes"],
+                "updated_at": _now(),
+            },
+        )
+        return await get_order(order_id, True)
+
+    @router.delete("/orders/{order_id}")
+    async def delete_order(order_id: str, _: bool = Depends(require_admin)):
+        repeats = await database.fetch_one(
+            "SELECT COUNT(*) AS n FROM vault_orders WHERE parent_order_id = :id", {"id": order_id}
+        )
+        if repeats and repeats["n"]:
+            raise HTTPException(
+                status_code=409, detail=f"Still the original for {repeats['n']} repeat orders. Remove those first."
+            )
+        await database.execute("DELETE FROM vault_orders WHERE id = :id", {"id": order_id})
         return {"ok": True}
 
     # ---- reports ---------------------------------------------------------
@@ -787,6 +1189,72 @@ def build(database, require_admin, upload_dir: Path):
             "unbalanced_plates": [dict(r) for r in unbalanced],
         }
 
+    @router.get("/reports/plate-charges")
+    async def report_plate_charges(_: bool = Depends(require_admin)):
+        """
+        Every plate with both sides of its money: what it cost the company and
+        what the customer was charged for it under whichever policy applies.
+        """
+        rows = await database.fetch_all(
+            """
+            SELECT p.*, v.name AS vendor_name, d.kld_number, mo.mould_code,
+                   c.name AS charge_customer_name,
+                   COALESCE((SELECT SUM(o.quantity) FROM vault_orders o
+                             WHERE o.plate_id = p.id AND o.status IN ('running', 'closed')), 0) AS delivered_qty,
+                   (SELECT COUNT(*) FROM vault_orders o WHERE o.plate_id = p.id) AS order_count
+            FROM vault_plates p
+            LEFT JOIN vault_vendors v ON v.id = p.vendor_id
+            LEFT JOIN vault_dies d ON d.id = p.die_id
+            LEFT JOIN vault_moulds mo ON mo.id = p.mould_id
+            LEFT JOIN vault_customers c ON c.id = p.charge_customer_id
+            ORDER BY p.made_on DESC, p.plate_number
+            """
+        )
+        items, totals = [], {
+            "cost_to_company_minor": 0,
+            "cost_to_customer_minor": 0,
+            "refund_outstanding_minor": 0,
+            "net_to_company_minor": 0,
+        }
+        for r in rows:
+            row = dict(r)
+            charge = plate_charge(row, row.get("delivered_qty") or 0)
+            for key in totals:
+                totals[key] += charge[key]
+            items.append({**row, **charge})
+        return {
+            "items": items,
+            "totals": totals,
+            # Plates that have earned their refund but have not been credited yet.
+            "refunds_due": [i for i in items if i["refund_outstanding_minor"] > 0],
+            "absorbed": [i for i in items if i["charge_policy"] == "none" and i["cost_to_company_minor"] > 0],
+        }
+
+    @router.get("/reports/orders")
+    async def report_orders(_: bool = Depends(require_admin)):
+        """The CRM-to-design board: where every order is, and which are repeats."""
+        rows = await database.fetch_all(f"{ORDER_SELECT} ORDER BY o.ordered_on DESC, o.order_number")
+        items = [dict(r) for r in rows]
+        by_status = {
+            status: [i for i in items if (i["status"] or "crm_raised") == status] for status in ORDER_STATUSES
+        }
+        waiting = [
+            i for i in items
+            if (i["status"] or "crm_raised") in ("crm_raised", "design_wip")
+        ]
+        return {
+            "items": items,
+            "statuses": ORDER_STATUSES,
+            "counts": {k: len(v) for k, v in by_status.items()},
+            "quantity_by_status": {
+                k: sum(int(i["quantity"] or 0) for i in v) for k, v in by_status.items()
+            },
+            # What design still owes CRM.
+            "waiting_on_design": waiting,
+            "repeats": [i for i in items if i["parent_order_id"]],
+            "no_plate_yet": [i for i in items if not i["plate_id"]],
+        }
+
     @router.get("/reports/artworks.csv")
     async def export_artworks_csv(_: bool = Depends(require_admin)):
         rows = await database.fetch_all(
@@ -866,11 +1334,19 @@ def build(database, require_admin, upload_dir: Path):
         # Refuse to orphan records rather than silently breaking the links.
         guards = {
             "moulders": [("vault_customers", "moulder_id", "customers"), ("vault_moulds", "moulder_id", "moulds")],
-            "customers": [("vault_artworks", "customer_id", "artworks")],
-            "dies": [("vault_artworks", "die_id", "artworks"), ("vault_plates", "die_id", "plates")],
-            "moulds": [("vault_artworks", "mould_id", "artworks")],
+            "customers": [
+                ("vault_artworks", "customer_id", "artworks"),
+                ("vault_plates", "charge_customer_id", "plates"),
+                ("vault_orders", "customer_id", "orders"),
+            ],
+            "dies": [
+                ("vault_artworks", "die_id", "artworks"),
+                ("vault_plates", "die_id", "plates"),
+                ("vault_orders", "die_id", "orders"),
+            ],
+            "moulds": [("vault_artworks", "mould_id", "artworks"), ("vault_plates", "mould_id", "plates")],
             "vendors": [("vault_plates", "vendor_id", "plates")],
-            "artworks": [("vault_plate_lines", "artwork_id", "plates")],
+            "artworks": [("vault_plate_lines", "artwork_id", "plates"), ("vault_orders", "artwork_id", "orders")],
         }
         for child_table, column, label in guards.get(entity, []):
             row = await database.fetch_one(

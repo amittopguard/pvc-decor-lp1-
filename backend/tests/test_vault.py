@@ -399,6 +399,197 @@ def run(client):
     section("12. Unknown record types are rejected")
     check("an unknown entity 404s", client.get("/vault/widgets").status_code == 404)
 
+    section("13. A plate carries its artwork name and its KLD reference")
+    labelled = client.post(
+        "/vault/plates",
+        json={
+            "plate_number": "PL-LBL",
+            "die_id": die["id"],
+            "colours": 4,
+            "plate_sets": 1,
+            "lines": [{"artwork_id": artworks[0]["id"]}, {"artwork_id": artworks[1]["id"]}],
+        },
+    ).json()
+    check(
+        "the artwork label is filled in from the lines",
+        labelled["artwork_label"] and "+" in labelled["artwork_label"],
+        str(labelled["artwork_label"]),
+    )
+    die_now = next(d for d in client.get("/vault/dies").json()["items"] if d["id"] == die["id"])
+    check(
+        "the KLD label is the die's number",
+        labelled["kld_label"] == die_now["kld_number"],
+        f"{labelled['kld_label']} vs {die_now['kld_number']}",
+    )
+
+    typed = client.post(
+        "/vault/plates",
+        json={"plate_number": "PL-TYPED", "die_id": die["id"], "artwork_label": "As etched",
+              "kld_label": "rev B by hand", "lines": [{"artwork_id": artworks[0]["id"]}]},
+    ).json()
+    check("a label typed by hand is left alone", typed["artwork_label"] == "As etched")
+    check("and so is the KLD wording", typed["kld_label"] == "rev B by hand")
+
+    section("14. Cost to company against cost to customer")
+    # Absorbed entirely: the customer sees nothing.
+    absorbed = client.post(
+        "/vault/plates",
+        json={"plate_number": "PL-FREE", "die_id": die["id"], "actual_cost_minor": 300000,
+              "charge_policy": "none", "charge_customer_id": customer["id"]},
+    ).json()
+    check("an absorbed plate charges the customer nothing", absorbed["charge"]["cost_to_customer_minor"] == 0)
+    check("but still costs the company", absorbed["charge"]["net_to_company_minor"] == 300000)
+
+    half = client.post(
+        "/vault/plates",
+        json={"plate_number": "PL-HALF", "die_id": die["id"], "actual_cost_minor": 300000,
+              "charge_policy": "percent", "charge_percent": 50, "charge_customer_id": customer["id"]},
+    ).json()
+    check("a 50% plate bills half", half["charge"]["cost_to_customer_minor"] == 150000,
+          str(half["charge"]["cost_to_customer_minor"]))
+    check("and leaves the other half with us", half["charge"]["net_to_company_minor"] == 150000)
+
+    check(
+        "an out-of-range percentage is refused",
+        client.post("/vault/plates", json={"plate_number": "PL-BAD", "charge_policy": "percent",
+                                           "charge_percent": 140}).status_code == 400,
+    )
+    check(
+        "an unknown charge policy is refused",
+        client.post("/vault/plates", json={"plate_number": "PL-BAD2",
+                                           "charge_policy": "sometimes"}).status_code == 400,
+    )
+    check(
+        "a refundable plate without a threshold is refused",
+        client.post("/vault/plates", json={"plate_number": "PL-BAD3",
+                                           "charge_policy": "refundable"}).status_code == 400,
+    )
+
+    section("15. Refund after a quantity, counted across repeat orders")
+    refundable = client.post(
+        "/vault/plates",
+        json={"plate_number": "PL-REF", "die_id": die["id"], "actual_cost_minor": 400000,
+              "charge_policy": "refundable", "refund_after_qty": 100000,
+              "charge_customer_id": customer["id"], "lines": [{"artwork_id": artworks[0]["id"]}]},
+    ).json()
+    check("it is charged up front in full", refundable["charge"]["cost_to_customer_minor"] == 400000)
+    check("with nothing refundable yet", refundable["charge"]["refund_ready"] is False)
+
+    first = client.post(
+        "/vault/orders",
+        json={"order_number": "SO-1", "customer_id": customer["id"], "artwork_id": artworks[0]["id"],
+              "die_id": die["id"], "plate_id": refundable["id"], "quantity": 60000, "colours": 4,
+              "ordered_on": "2026-08-02", "raised_by": "CRM Anita", "status": "running"},
+    )
+    check("CRM can raise an order", first.status_code == 200, first.text[:200])
+    first = first.json()
+
+    state = client.get(f"/vault/plates/{refundable['id']}").json()
+    check("60k run does not reach the threshold", state["charge"]["refund_ready"] is False,
+          str(state["charge"]["delivered_qty"]))
+
+    repeat = client.post(
+        "/vault/orders",
+        json={"order_number": "SO-2", "parent_order_id": first["id"], "quantity": 50000,
+              "ordered_on": "2026-09-02", "status": "running"},
+    ).json()
+    check("a repeat inherits the original's artwork", repeat["artwork_id"] == artworks[0]["id"])
+    check("and its plate", repeat["plate_id"] == refundable["id"])
+    check("and names its original", repeat["parent_order_number"] == "SO-1")
+
+    state = client.get(f"/vault/plates/{refundable['id']}").json()
+    check("the two orders together cross the threshold", state["charge"]["delivered_qty"] == 110000,
+          str(state["charge"]["delivered_qty"]))
+    check("so the refund is now due", state["charge"]["refund_ready"] is True)
+    check("for the whole amount charged", state["charge"]["refund_outstanding_minor"] == 400000)
+
+    body = {k: state[k] for k in ("plate_number", "die_id", "actual_cost_minor", "charge_policy",
+                                  "refund_after_qty", "charge_customer_id")}
+    body["refunded_minor"] = 400000
+    body["lines"] = [{"artwork_id": artworks[0]["id"]}]
+    settled = client.put(f"/vault/plates/{refundable['id']}", json=body).json()
+    check("once credited nothing is outstanding", settled["charge"]["refund_outstanding_minor"] == 0)
+    check("and the plate ends up costing the company its full price",
+          settled["charge"]["net_to_company_minor"] == 400000,
+          str(settled["charge"]["net_to_company_minor"]))
+
+    charges = client.get("/vault/reports/plate-charges").json()
+    check("the charge report totals both sides", charges["totals"]["cost_to_company_minor"] > 0)
+    check("and lists what we absorbed", any(i["plate_number"] == "PL-FREE" for i in charges["absorbed"]))
+
+    section("16. CRM raises, design picks up")
+    job = client.post(
+        "/vault/orders",
+        json={"order_number": "SO-3", "customer_id": customer["id"], "quantity": 25000,
+              "raised_by": "CRM Anita", "due_on": "2026-09-15"},
+    ).json()
+    check("a new order starts with CRM", job["status"] == "crm_raised", str(job["status"]))
+
+    blocked = client.patch(f"/vault/orders/{job['id']}/status", json={"status": "design_done"})
+    check("design cannot sign off without an artwork", blocked.status_code == 400, blocked.text[:120])
+
+    moved = client.patch(
+        f"/vault/orders/{job['id']}/status",
+        json={"status": "design_wip", "assigned_to": "Design Ravi"},
+    ).json()
+    check("design takes it up", moved["status"] == "design_wip")
+    check("and the order records who has it", moved["assigned_to"] == "Design Ravi")
+
+    client.put(
+        f"/vault/orders/{job['id']}",
+        json={"order_number": "SO-3", "customer_id": customer["id"], "artwork_id": artworks[1]["id"],
+              "quantity": 25000, "status": "design_wip", "assigned_to": "Design Ravi"},
+    )
+    done = client.patch(
+        f"/vault/orders/{job['id']}/status",
+        json={"status": "design_done", "design_notes": "Trapping fixed, 4C confirmed"},
+    ).json()
+    check("with an artwork attached design can sign off", done["status"] == "design_done")
+    check("the design note is kept", "Trapping" in (done["design_notes"] or ""))
+    check(
+        "an unknown status is refused",
+        client.patch(f"/vault/orders/{job['id']}/status", json={"status": "shipped"}).status_code == 400,
+    )
+
+    board = client.get("/vault/reports/orders").json()
+    check("the board counts every stage", set(board["counts"]) == set(vault.ORDER_STATUSES), str(board["counts"]))
+    check("SO-3 is waiting on nobody now", all(i["order_number"] != "SO-3" for i in board["waiting_on_design"]))
+    check("the repeat is listed as a repeat", any(i["order_number"] == "SO-2" for i in board["repeats"]))
+    check("SO-3 has no plate yet", any(i["order_number"] == "SO-3" for i in board["no_plate_yet"]))
+    check("the board can be filtered by status",
+          all(i["status"] == "running" for i in client.get("/vault/orders?status=running").json()["items"]))
+
+    section("17. Orders hold the links in place")
+    check(
+        "a plate that has run orders cannot be deleted",
+        client.delete(f"/vault/plates/{refundable['id']}").status_code == 409,
+    )
+    check(
+        "an original with repeats cannot be deleted",
+        client.delete(f"/vault/orders/{first['id']}").status_code == 409,
+    )
+    check("the repeat can go", client.delete(f"/vault/orders/{repeat['id']}").status_code == 200)
+    check("and then so can the original", client.delete(f"/vault/orders/{first['id']}").status_code == 200)
+    check(
+        "an order pointing at a plate that is not there is refused",
+        client.post("/vault/orders", json={"order_number": "SO-X", "plate_id": "nope"}).status_code == 400,
+    )
+
+    section("18. The charge maths on its own")
+    check("no policy given means the full cost is billed",
+          vault.plate_charge({"actual_cost_minor": 1000})["cost_to_customer_minor"] == 1000)
+    check("percent defaults to half when no figure is set",
+          vault.plate_charge({"actual_cost_minor": 1000, "charge_policy": "percent"})
+          ["cost_to_customer_minor"] == 500)
+    check("a negotiated figure beats the policy",
+          vault.plate_charge({"actual_cost_minor": 1000, "charge_policy": "full", "charged_minor": 250})
+          ["cost_to_customer_minor"] == 250)
+    check("a plate with no cost recorded charges nothing",
+          vault.plate_charge({})["cost_to_customer_minor"] == 0)
+    check("a refund threshold of zero never triggers",
+          vault.plate_charge({"actual_cost_minor": 1000, "charge_policy": "refundable",
+                              "refund_after_qty": 0}, 99999)["refund_ready"] is False)
+
 
 if __name__ == "__main__":
     sys.exit(main())
