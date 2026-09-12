@@ -16,6 +16,16 @@ const initial = {
   expected_volume: "", current_supplier: "", monthly_volume_sqm: "", message: "",
 };
 
+// Unit of sale differs by product: PVC Decor Film is area/length-based, PETLAM is weight-based.
+const UNIT_HINTS = {
+  "PVC Decor Film": { quantity: "e.g., 5000 sq mtr / 500 running mtr / 20 rolls", volume: "e.g., 10,000 sq mtr / month" },
+  "PETLAM": { quantity: "e.g., 2000 kg", volume: "e.g., 2,000 kg / month" },
+};
+const DEFAULT_UNIT_HINT = { quantity: "e.g., 5000 sq mtr (film) or 2000 kg (PETLAM)", volume: "e.g., 10,000 sq mtr or 2,000 kg / month" };
+function unitHintFor(productInterest) {
+  return UNIT_HINTS[productInterest] || DEFAULT_UNIT_HINT;
+}
+
 function Field({ label, required, children, testid }) {
   return (
     <div className="flex flex-col gap-1.5" data-testid={testid}>
@@ -208,9 +218,8 @@ export default function LeadForms() {
                         <SelectValue placeholder="Select a product" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="Wall Panel">Wall Panel</SelectItem>
-                        <SelectItem value="Laminates">Laminates</SelectItem>
-                        <SelectItem value="Acrylic">Acrylic</SelectItem>
+                        <SelectItem value="PVC Decor Film">PVC Decor Film (sq mtr / running mtr / roll)</SelectItem>
+                        <SelectItem value="PETLAM">PETLAM (kg)</SelectItem>
                         <SelectItem value="All Products">All Products</SelectItem>
                       </SelectContent>
                     </Select>
@@ -218,7 +227,7 @@ export default function LeadForms() {
 
                   {tab === "quote" && (
                     <Field label="Approx. Quantity" testid="field-qty">
-                      <Input className={inputCls} value={state.quantity} onChange={up("quantity")} placeholder="e.g., 5000 sqm / 20 rolls" data-testid="input-quantity" />
+                      <Input className={inputCls} value={state.quantity} onChange={up("quantity")} placeholder={unitHintFor(state.product_interest).quantity} data-testid="input-quantity" />
                     </Field>
                   )}
 
@@ -231,7 +240,7 @@ export default function LeadForms() {
                         <Input className={inputCls} value={state.experience_years} onChange={up("experience_years")} placeholder="e.g., 5 years" data-testid="input-experience" />
                       </Field>
                       <Field label="Expected Monthly Volume" testid="field-volume">
-                        <Input className={inputCls} value={state.expected_volume} onChange={up("expected_volume")} placeholder="e.g., 10,000 sqm / month" data-testid="input-volume" />
+                        <Input className={inputCls} value={state.expected_volume} onChange={up("expected_volume")} placeholder={unitHintFor(state.product_interest).volume} data-testid="input-volume" />
                       </Field>
                     </>
                   )}
@@ -241,8 +250,8 @@ export default function LeadForms() {
                       <Field label="Current Supplier" testid="field-supplier">
                         <Input className={inputCls} value={state.current_supplier} onChange={up("current_supplier")} placeholder="e.g., Brand / Country" data-testid="input-supplier" />
                       </Field>
-                      <Field label="Monthly Volume (sqm)" testid="field-monthly-volume">
-                        <Input className={inputCls} value={state.monthly_volume_sqm} onChange={up("monthly_volume_sqm")} placeholder="e.g., 5000 sqm" data-testid="input-monthly-volume" />
+                      <Field label="Monthly Volume" testid="field-monthly-volume">
+                        <Input className={inputCls} value={state.monthly_volume_sqm} onChange={up("monthly_volume_sqm")} placeholder={unitHintFor(state.product_interest).volume} data-testid="input-monthly-volume" />
                       </Field>
                       <div className="sm:col-span-2" data-testid="field-file">
                         <Label className="text-xs uppercase tracking-[0.14em] font-semibold text-slate-700">

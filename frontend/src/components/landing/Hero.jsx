@@ -11,7 +11,7 @@ const AUDIENCES_FALLBACK = [
 ];
 
 const MARQUEE = [
-  "Wall Panels", "Laminates",
+  "PVC Decor Film", "PETLAM",
   "Pan-India Dispatch", "Custom Prints", "Low MOQ", "Export Documentation",
   "Walnut · Marble · Solid · Wood Grain", "23 Years In The Manufacturers",
 ];
@@ -59,7 +59,7 @@ export default function Hero() {
   const headline = hero?.headline || "Imports are slow";
   const subHeadline = hero?.sub_headline || "and expensive";
   const twistLine = hero?.twist_line || "OPTIONAL.";
-  const description = hero?.description || "We manufacture Wall Panels, Laminates & Acrylic Sheets. From our floor to yours.";
+  const description = hero?.description || "We manufacture PVC Decor Film and PETLAM. From our floor to yours.";
   const ctaText = hero?.cta_text || "Get a Free Sample Box";
   const ctaLink = hero?.cta_link || "#contact";
   const cta2Text = hero?.cta2_text || "Beat My Import Price";
@@ -71,7 +71,7 @@ export default function Hero() {
       className="relative bg-slate-950 text-white overflow-hidden noise-layer pt-28 pb-0"
     >
       {/* SEO: single h1 for the page */}
-      <h1 className="sr-only">TopDecor — Wall Panels, Laminates & Acrylic</h1>
+      <h1 className="sr-only">TopDecor — PVC Decor Film & PETLAM</h1>
 
       {/* Backdrop layers */}
       <div className="absolute inset-0 kdipl-grid-bg opacity-[0.06]" aria-hidden />
@@ -119,14 +119,14 @@ export default function Hero() {
                 {twistLine}
               </div>
               <span className="absolute -top-2 -right-2 sm:top-0 sm:right-2 lg:top-2 lg:right-6 text-[10px] uppercase tracking-[0.28em] font-bold text-orange-300 hidden sm:block">
-                Wall Panel · Laminates · Acrylic
+                PVC Decor Film · PETLAM
               </span>
             </div>
           </div>
 
           {/* Twist sub-line */}
           <p className="mt-8 text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl fade-up"
-            dangerouslySetInnerHTML={{ __html: description.replace(/Wall Panels/g, '<strong class="text-white font-semibold">Wall Panels</strong>').replace(/Laminates/g, '<strong class="text-white font-semibold">Laminates</strong>').replace(/Acrylic Sheets/g, '<strong class="text-white font-semibold">Acrylic Sheets</strong>') }}
+            dangerouslySetInnerHTML={{ __html: description.replace(/PVC Decor Film/g, '<strong class="text-white font-semibold">PVC Decor Film</strong>').replace(/PETLAM/g, '<strong class="text-white font-semibold">PETLAM</strong>') }}
           />
 
           {/* Audience pills */}

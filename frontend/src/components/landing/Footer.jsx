@@ -48,11 +48,11 @@ export default function Footer() {
             )}
             <div>
               <div className="font-display font-bold text-white text-xl">{brandName}</div>
-              <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">Wall Panels &middot; Laminates &middot; Acrylic</div>
+              <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">PVC Decor Film &middot; PETLAM</div>
             </div>
           </div>
           <p className="mt-5 text-sm leading-relaxed text-slate-400 max-w-md">
-            Premium Wall Panels, Laminates & Acrylic Sheets. Made in India, shipped worldwide. Backed by 23+ years of industry experience.
+            Premium PVC Decor Film & PETLAM. Made in India, shipped worldwide. Backed by 23+ years of industry experience.
           </p>
         </div>
 

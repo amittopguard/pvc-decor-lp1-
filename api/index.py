@@ -440,13 +440,12 @@ def admin_seed(_=Depends(require_admin)):
             seeded.append(name)
 
     seed_if_empty("branding", [{"brand_name":"TopDecor","legal_name":"Kiana Decor India Pvt Ltd","tagline":"Sajao Bharat, Badhao Bharat","logo_url":"","favicon_url":"","og_image_url":""}])
-    seed_if_empty("hero", [{"headline":"Imports are slow.","sub_headline":"And expensive. And, honestly — OPTIONAL.","twist_line":"OPTIONAL.","description":"We press PVC Decor Film for membrane doors and now PVC Laminates 1 mm & 3 mm for acrylic sheets.","cta_text":"Get a Free Sample Box","cta_link":"#contact","cta2_text":"Beat My Import Price","image_url":""}])
+    seed_if_empty("hero", [{"headline":"Imports are slow.","sub_headline":"And expensive. And, honestly — OPTIONAL.","twist_line":"OPTIONAL.","description":"We manufacture PVC Decor Film and PETLAM. From our floor to yours.","cta_text":"Get a Free Sample Box","cta_link":"#contact","cta2_text":"Beat My Import Price","image_url":""}])
     seed_if_empty("products", [
-        {"name":"PVC Decor Film","category":"Membrane Door","tag":"Flagship","subtitle":"For PVC Membrane Doors","process":"Vacuum Press Process","points":"3D wrap ready|Scratch & moisture resistant|Wide design library|Custom print runs","image":"/images/pvc-decor-film.jpg","active":True},
-        {"name":"PVC Laminate 1 mm","category":"Acrylic","tag":"New Launch","subtitle":"For Acrylic Sheets & Panels","process":"Pressed & Polished","points":"High-gloss finish|UV stable|Easy to fabricate|Uniform thickness","image":"/images/walnut-texture.jpg","active":True},
-        {"name":"PVC Laminate 3 mm","category":"Laminates","tag":"New Launch","subtitle":"Rigid Decorative Sheets","process":"Pressed & Polished","points":"Structural thickness|Textured & solid ranges|Cut-to-size|Contract pricing","image":"/images/marble-texture.jpg","active":True},
+        {"name":"PVC Decor Film","category":"Membrane Door","tag":"Flagship","subtitle":"For Membrane Doors, Louvers, Shutters & Wall Panels","process":"Vacuum Press Process","units":"sq mtr · running mtr · roll","points":"3D wrap ready|Scratch & moisture resistant|Wide design library|Custom print runs","image":"/images/pvc-decor-film.jpg","active":True},
+        {"name":"PETLAM","category":"ACP & Cladding","tag":"Core","subtitle":"PET Laminated Decor Film for ACP, Partition & Cladding Panels","process":"Laminated & Coated","units":"kg","points":"Consistent gsm & gloss|Wide colour & texture range|Bonds cleanly to ACP core|Custom roll widths","image":"/images/walnut-texture.jpg","active":True},
     ])
-    seed_if_empty("categories", [{"name":"Membrane Door"},{"name":"Furniture"},{"name":"Wall Panels"},{"name":"Acrylic"},{"name":"Laminates"}])
+    seed_if_empty("categories", [{"name":"Membrane Door"},{"name":"Louver / Shutter"},{"name":"Wall Panel"},{"name":"ACP & Cladding"},{"name":"Partition"}])
     seed_if_empty("audience", [
         {"audience_id":"distributors","label":"Distributor","icon":"Truck","target":"#distributors"},
         {"audience_id":"importers","label":"Importer","icon":"Globe","target":"#importers"},
@@ -455,7 +454,7 @@ def admin_seed(_=Depends(require_admin)):
     seed_if_empty("trust", [
         {"step":"01","title":"Raw Material QC","body":"Sourced PVC and additives tested for tensile, gloss and colour stability."},
         {"step":"02","title":"Printing & Coating","body":"High-definition texture printing with protective top coats for durability."},
-        {"step":"03","title":"Vacuum Press / Lamination","body":"Industrial presses for films; precision pressing for 1mm & 3mm laminates."},
+        {"step":"03","title":"Vacuum Press / Lamination","body":"Industrial vacuum press for PVC Decor Film; precision lamination and coating for PETLAM."},
         {"step":"04","title":"Inspection & Dispatch","body":"Batch-wise QC, roll/sheet labelling, and secure freight-ready packaging."},
     ])
     seed_if_empty("faq", [
@@ -464,13 +463,13 @@ def admin_seed(_=Depends(require_admin)):
         {"q":"Can I get custom designs or private-label prints?","a":"Absolutely. Private label and custom prints available above a minimum order."},
         {"q":"How do I become a TopDecor distributor?","a":"Fill the Distributor Application tab in the contact form."},
         {"q":"Are samples free?","a":"Yes, a physical sample box is free for serious enquiries in India."},
-        {"q":"What applications are 1mm and 3mm PVC laminates used for?","a":"1mm is bonded with acrylic sheets for cabinet shutters; 3mm is used as rigid decorative panelling."},
+        {"q":"What is PETLAM used for?","a":"PETLAM is a PET laminated decor film that ACP, partition and cladding panel makers bond onto their panel core for a finished decorative surface. It is billed by weight (kg)."},
     ])
     seed_if_empty("testimonials", [
         {"quote":"We switched from a Chinese supplier to TopDecor last year. Lead time dropped from 45 days to under a week.","name":"R. Sundaresan","role":"Production Head","company":"Door Manufacturer · Tamil Nadu","audience":"Manufacturer","rating":5},
         {"quote":"Started as a regional distributor three years ago. Today my territory does 4× the volume I planned.","name":"Vikas Mehta","role":"Founder","company":"Plywood & Laminate Distributor · Pune","audience":"Distributor","rating":5},
     ])
-    seed_if_empty("seo_settings", [{"title":"TopDecor — PVC Decor Film for Membrane Doors | Manufacturer in India","description":"TopDecor manufactures PVC Decor Film, Acrylic Sheets and Laminate Wall Panels.","og_title":"TopDecor — PVC Decor Film for Membrane Doors","og_description":"Indian manufacturer of PVC Decor Film.","og_image":"","canonical":"https://topdecor.in/"}])
+    seed_if_empty("seo_settings", [{"title":"TopDecor — PVC Decor Film & PETLAM | Manufacturer in India","description":"TopDecor manufactures PVC Decor Film for membrane doors, louvers, shutters and wall panels, and PETLAM for ACP, partition and cladding panel makers, in India.","og_title":"TopDecor — PVC Decor Film & PETLAM","og_description":"Indian manufacturer of PVC Decor Film and PETLAM.","og_image":"","canonical":"https://topdecor.in/"}])
     seed_if_empty("contact", [{"phone":"+91 93113 42988","whatsapp":"919311342988","email":"sales@kdipl.in","email_cc":"nm@kdipl.in","address":"Kundli, Sonipat, Haryana, India","form_destination":"sales@kdipl.in"}])
     return {"seeded": seeded}
 

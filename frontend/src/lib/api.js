@@ -20,6 +20,6 @@ export const KDIPL = {
   email: "sales@kdipl.in",
   emailCc: "nm@kdipl.in",
   company: "TopDecor",
-  tagline: "TopDecor — Wall Panels · Laminates · Acrylic",
+  tagline: "TopDecor — PVC Decor Film · PETLAM",
   years: "23+",
 };

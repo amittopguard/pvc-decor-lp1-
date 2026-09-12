@@ -55,7 +55,7 @@ export default function Header() {
           )}
           <div className="leading-tight">
             <div className="font-display font-bold text-slate-900 text-lg">{brandName}</div>
-            <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 -mt-0.5">Wall Panels &middot; Laminates &middot; Acrylic</div>
+            <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500 -mt-0.5">PVC Decor Film &middot; PETLAM</div>
           </div>
         </a>
 

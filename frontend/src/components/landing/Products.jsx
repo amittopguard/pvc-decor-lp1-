@@ -3,9 +3,8 @@ import { ArrowRight } from "lucide-react";
 import { fetchCMS } from "@/lib/cms";
 
 const PRODUCTS_FALLBACK = [
-  { tag: "Flagship", title: "Wall Panel", subtitle: "Decorative Wall Cladding", process: "Pressed & Finished", points: ["Premium surface finish", "Scratch & moisture resistant", "Wide design library", "Easy installation"], image: "/images/pvc-decor-film.jpg", accent: "bg-orange-600" },
-  { tag: "Core", title: "Laminates", subtitle: "High-Pressure Decorative Laminates", process: "Pressed & Polished", points: ["Structural thickness", "Textured & solid ranges", "Cut-to-size", "Contract pricing"], image: "/images/walnut-texture.jpg", accent: "bg-slate-900" },
-  { tag: "Core", title: "Acrylic", subtitle: "For Cabinet Shutters & Panels", process: "Pressed & Polished", points: ["High-gloss finish", "UV stable", "Easy to fabricate", "Uniform thickness"], image: "/images/marble-texture.jpg", accent: "bg-slate-900" },
+  { tag: "Flagship", title: "PVC Decor Film", subtitle: "For Membrane Doors, Louvers, Shutters & Wall Panels", process: "Vacuum Press Process", units: "sq mtr · running mtr · roll", points: ["3D wrap ready", "Scratch & moisture resistant", "Wide design library", "Custom print runs"], image: "/images/pvc-decor-film.jpg", accent: "bg-orange-600" },
+  { tag: "Core", title: "PETLAM", subtitle: "PET Laminated Decor Film for ACP, Partition & Cladding Panels", process: "Laminated & Coated", units: "kg", points: ["Consistent gsm & gloss", "Wide colour & texture range", "Bonds cleanly to ACP core", "Custom roll widths"], image: "/images/walnut-texture.jpg", accent: "bg-slate-900" },
 ];
 
 export default function Products() {
@@ -21,6 +20,7 @@ export default function Products() {
           process: p.process || "",
           points: typeof p.points === "string" ? p.points.split("|") : (p.points || []),
           image: p.image || "/images/pvc-decor-film.jpg",
+          units: p.units || p.unit_of_sale || "",
           accent: i === 0 ? "bg-orange-600" : "bg-slate-900",
         })));
       }
@@ -34,11 +34,11 @@ export default function Products() {
           <div className="max-w-2xl">
             <div className="overline">01 &mdash; Product Line</div>
             <h2 className="mt-3 font-display font-bold text-slate-900 text-4xl sm:text-5xl tracking-tight">
-              Three products.<br />One engineered standard.
+              Two products.<br />One engineered standard.
             </h2>
           </div>
           <p className="text-slate-600 max-w-md text-base leading-relaxed">
-            From Wall Panels to Laminates to Acrylic. TopDecor is built to replace imports with consistent, local supply.
+            PVC Decor Film and PETLAM. TopDecor is built to replace imports with consistent, local supply.
           </p>
         </div>
 
@@ -80,6 +80,11 @@ export default function Products() {
                 <div className="text-xs uppercase tracking-widest text-slate-500">{p.process}</div>
                 <h3 className="mt-2 font-display text-2xl font-bold text-slate-900">{p.title}</h3>
                 <p className="text-slate-600 text-sm mt-1">{p.subtitle}</p>
+                {p.units && (
+                  <div className="mt-2 inline-flex items-center gap-1.5 self-start text-[10px] uppercase tracking-[0.16em] font-bold text-orange-700 bg-orange-50 border border-orange-200 px-2.5 py-1">
+                    Sold by: {p.units}
+                  </div>
+                )}
 
                 <ul className="mt-5 space-y-2 flex-1">
                   {p.points.map((pt, j) => (
