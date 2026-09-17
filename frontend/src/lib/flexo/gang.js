@@ -1,0 +1,312 @@
+/**
+ * Gang run planning: several label SKUs sharing one web, one cylinder and one
+ * plate set.
+ *
+ * The press runs until the slowest-filling SKU has met its quantity, so every
+ * other SKU overruns. Choosing lane counts close to the ratio of the ordered
+ * quantities is what keeps that overrun — and the material bill — down.
+ */
+
+import { aroundFit, cylinderTeeth, round, DEFAULT_PLATE_TOLERANCE } from "./layout";
+
+const EPS = 1e-6;
+
+const num = (v) => {
+  const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+};
+
+/**
+ * Best lane allocation for one web and one cylinder.
+ * Depth-first over lane counts, pruned on width; the remaining SKUs always
+ * need at least one lane each, which cuts the tree hard.
+ */
+function bestLanes(items, ctx, deadline) {
+  const { maxUsable, minWidth, maxWidth, gap, margin, repeat } = ctx;
+  const n = items.length;
+  const lanes = new Array(n).fill(1);
+  let best = null;
+  let leaves = 0;
+
+  // Width still needed if every remaining SKU takes a single lane.
+  const tailMin = new Array(n + 1).fill(0);
+  for (let i = n - 1; i >= 0; i--) tailMin[i] = tailMin[i + 1] + items[i].w + gap;
+
+  const evaluate = () => {
+    leaves++;
+    let revolutions = 0;
+    for (let i = 0; i < n; i++) {
+      const perRev = lanes[i] * items[i].around;
+      revolutions = Math.max(revolutions, Math.ceil(items[i].qty / perRev));
+    }
+    let overrun = 0;
+    let totalLanes = 0;
+    let block = 0;
+    for (let i = 0; i < n; i++) {
+      overrun += revolutions * lanes[i] * items[i].around - items[i].qty;
+      totalLanes += lanes[i];
+      block += lanes[i] * items[i].w;
+    }
+    block += (totalLanes - 1) * gap;
+
+    // The web is slit to what the lanes need, but never below the minimum
+    // printable width — anything narrower still costs the minimum.
+    const webWidth = Math.max(minWidth, block + 2 * margin);
+    if (webWidth > maxWidth + EPS) return;
+    const material = revolutions * webWidth * repeat;
+
+    if (
+      !best ||
+      material < best.material - 1e-6 ||
+      (Math.abs(material - best.material) <= 1e-6 && overrun < best.overrun) ||
+      (Math.abs(material - best.material) <= 1e-6 && overrun === best.overrun && totalLanes < best.totalLanes)
+    ) {
+      best = { lanes: [...lanes], revolutions, overrun, totalLanes, webWidth, block, material };
+    }
+  };
+
+  const walk = (i, usedWidth) => {
+    if (leaves > 400000 || Date.now() > deadline) return;
+    if (i === n) {
+      evaluate();
+      return;
+    }
+    for (let k = 1; ; k++) {
+      lanes[i] = k;
+      const width = usedWidth + k * (items[i].w + gap);
+      // Everything after this SKU still needs one lane apiece.
+      if (width + tailMin[i + 1] - gap > maxUsable + EPS) break;
+      walk(i + 1, width);
+      if (leaves > 400000 || Date.now() > deadline) break;
+    }
+    lanes[i] = 1;
+  };
+
+  walk(0, 0);
+  return best;
+}
+
+/**
+ * Rank gang plans across the candidate webs and cylinders.
+ * `skus` need width, height and qty; each may allow rotation independently.
+ */
+export function solveGang({
+  skus = [],
+  webs = [],
+  webRange = null,
+  cylinders = {},
+  gapAcross = 3,
+  gapAround = 3,
+  edgeMargin = 0,
+  pitch = 3.175,
+  plateTolerance = DEFAULT_PLATE_TOLERANCE,
+  minSkus = 2,
+  timeBudgetMs = 4000,
+  limit = 20,
+} = {}) {
+  const started = Date.now();
+  const deadline = started + timeBudgetMs;
+
+  const list = skus
+    .filter((s) => s && s.enabled !== false && num(s.width) > 0 && num(s.height) > 0 && num(s.qty) > 0)
+    .map((s, i) => ({
+      id: s.id || `sku-${i}`,
+      name: s.name || `SKU ${i + 1}`,
+      w: num(s.width),
+      h: num(s.height),
+      qty: Math.floor(num(s.qty)),
+      canRotate: s.canRotate !== false,
+    }));
+
+  const errors = [];
+  if (list.length < minSkus) errors.push("Add at least two SKUs to plan a gang run.");
+  if (list.length > 16) errors.push("Gang planning is limited to 16 SKUs on one plate.");
+  const useRange = !!webRange && num(webRange.max) > 0;
+  const rangeMin = useRange ? Math.max(0, num(webRange.min)) : 0;
+  const rangeMax = useRange ? num(webRange.max) : 0;
+  if (useRange && rangeMin > rangeMax) errors.push("The minimum print width is wider than the maximum.");
+  const webList = webs
+    .filter((w) => w && w.enabled !== false && num(w.width) > 0)
+    .map((w) => ({ width: num(w.width), label: w.label || `${round(num(w.width))}` }));
+  if (!useRange && !webList.length) errors.push("Enter at least one web width.");
+  const teethList = cylinderTeeth(cylinders);
+  if (!teethList.length) errors.push("Enter a cylinder range or a list of teeth counts.");
+  if (errors.length) return { ok: false, errors, options: [], best: null };
+
+  const gap = Math.max(0, num(gapAcross));
+  const minGapAround = Math.max(0, num(gapAround));
+  const margin = Math.max(0, num(edgeMargin));
+  const toothPitch = num(pitch) > 0 ? num(pitch) : 3.175;
+
+  const canFlip = (sku) => sku.canRotate && Math.abs(sku.w - sku.h) > EPS;
+
+  /** Every combination — only affordable for a handful of SKUs. */
+  function allOrientationSets() {
+    let sets = [[]];
+    for (const sku of list) {
+      const next = [];
+      for (const partial of sets) {
+        next.push([...partial, false]);
+        if (canFlip(sku)) next.push([...partial, true]);
+      }
+      sets = next;
+    }
+    return sets;
+  }
+
+  /**
+   * For a dozen SKUs the full product is millions of combinations, so pick a
+   * few strategies that between them cover what actually matters: keep every
+   * SKU as it is, turn them all, make each one as narrow as possible (more
+   * lanes fit), or give each one the most rows around.
+   */
+  function strategyOrientationSets(repeat) {
+    const natural = list.map(() => false);
+    const turned = list.map((sku) => canFlip(sku));
+    const narrow = list.map((sku) => canFlip(sku) && sku.h < sku.w);
+    const dense = list.map((sku) => {
+      if (!canFlip(sku)) return false;
+      const asIs = aroundFit(repeat, sku.h, minGapAround);
+      const flipped = aroundFit(repeat, sku.w, minGapAround);
+      if (!flipped) return false;
+      if (!asIs) return true;
+      return flipped.count > asIs.count;
+    });
+    const seen = new Set();
+    return [natural, turned, narrow, dense].filter((set) => {
+      const key = set.map((f) => (f ? "1" : "0")).join("");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  const enumerateAll = list.length <= 6;
+
+  const options = [];
+  let combos = 0;
+
+  const webCandidates = useRange
+    ? [{ width: rangeMax, label: "slit to fit", range: true }]
+    : webList.map((w) => ({ ...w, range: false }));
+
+  outer: for (const web of webCandidates) {
+    const usable = web.width - 2 * margin;
+    if (usable <= EPS) continue;
+
+    for (const teeth of teethList) {
+      const repeat = teeth * toothPitch;
+
+      const orientationSets = enumerateAll ? allOrientationSets() : strategyOrientationSets(repeat);
+
+      for (const flips of orientationSets) {
+        if (Date.now() > deadline) break outer;
+        combos++;
+
+        const items = [];
+        let viable = true;
+        for (let i = 0; i < list.length; i++) {
+          const sku = list[i];
+          const w = flips[i] ? sku.h : sku.w;
+          const h = flips[i] ? sku.w : sku.h;
+          const fit = aroundFit(repeat, h, minGapAround);
+          if (!fit || w + 2 * margin > web.width + EPS) {
+            viable = false;
+            break;
+          }
+          items.push({ w, h, around: fit.count, gapAround: fit.gap, qty: sku.qty, rotated: flips[i], sku });
+        }
+        if (!viable) continue;
+
+        const result = bestLanes(
+          items,
+          {
+            maxUsable: usable,
+            minWidth: web.range ? rangeMin : web.width,
+            maxWidth: web.range ? rangeMax : web.width,
+            gap,
+            margin,
+            repeat,
+          },
+          deadline
+        );
+        if (!result) continue;
+
+        const webWidth = result.webWidth;
+        const usedWidth = result.block;
+        const revArea = webWidth * repeat;
+        const materialArea = result.material;
+        const labelArea = items.reduce((s, it, i) => s + result.lanes[i] * it.around * it.w * it.h, 0);
+
+        options.push({
+          id: `${web.label}|${teeth}|${flips.map((f) => (f ? "r" : "n")).join("")}`,
+          webWidth: round(webWidth),
+          webLabel: web.range ? `${round(webWidth)}` : web.label,
+          belowMinimum: web.range && usedWidth + 2 * margin < rangeMin - EPS,
+          teeth,
+          repeat: round(repeat, 4),
+          revolutions: result.revolutions,
+          webLength: round(result.revolutions * repeat, 2),
+          materialArea,
+          totalOverrun: result.overrun,
+          totalLanes: result.totalLanes,
+          usedWidth: round(usedWidth, 3),
+          edgeWaste: round(webWidth - usedWidth, 3),
+          utilisation: labelArea / revArea,
+          lanes: items.map((it, i) => {
+            const perRev = result.lanes[i] * it.around;
+            const printed = result.revolutions * perRev;
+            return {
+              id: it.sku.id,
+              name: it.sku.name,
+              lanes: result.lanes[i],
+              around: it.around,
+              perRev,
+              rotated: it.rotated,
+              width: round(it.w),
+              height: round(it.h),
+              gapAround: round(it.gapAround, 4),
+              ordered: it.qty,
+              printed,
+              overrun: printed - it.qty,
+              overrunPct: it.qty > 0 ? (printed - it.qty) / it.qty : 0,
+            };
+          }),
+        });
+      }
+    }
+  }
+
+  if (!options.length) {
+    return {
+      ok: false,
+      errors: ["No gang layout fits. Try a wider web, a larger cylinder, or fewer SKUs per run."],
+      options: [],
+      best: null,
+    };
+  }
+
+  // Least material first; plans that tie within the tolerance are then ordered
+  // by the smaller cylinder, because the smaller plate is the cheaper plate.
+  const tol = plateTolerance > 0 ? plateTolerance : DEFAULT_PLATE_TOLERANCE;
+  const base = Math.log1p(tol);
+  options.forEach((o) => {
+    o.costBucket = Math.round(Math.log(o.materialArea) / base);
+  });
+  options.sort(
+    (a, b) =>
+      a.costBucket - b.costBucket ||
+      a.repeat - b.repeat ||
+      a.totalOverrun - b.totalOverrun ||
+      a.totalLanes - b.totalLanes
+  );
+
+  return {
+    ok: true,
+    errors: [],
+    options: options.slice(0, limit),
+    best: options[0],
+    combos,
+    elapsedMs: Date.now() - started,
+  };
+}
