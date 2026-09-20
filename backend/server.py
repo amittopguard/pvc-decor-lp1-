@@ -14,6 +14,7 @@ import base64
 import asyncio
 import logging
 import json
+import time
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Literal
@@ -21,6 +22,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 
 import resend
+
+from ratelimit import RateLimiter
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -174,13 +177,35 @@ async def send_lead_email(lead: Lead):
     except Exception as e:
         logger.error("Email send failed for lead %s: %s", lead.id, str(e))
 
+# --------- Rate Limiting ---------
+# Blunt form-spam floods on the public lead endpoints. Configurable via env;
+# set LEADS_RATE_LIMIT=0 to disable entirely.
+LEADS_RATE_LIMIT = int(os.environ.get('LEADS_RATE_LIMIT', '30'))
+LEADS_RATE_WINDOW = int(os.environ.get('LEADS_RATE_WINDOW_SECONDS', '60'))
+_leads_limiter = RateLimiter(LEADS_RATE_LIMIT, LEADS_RATE_WINDOW)
+
+def _client_ip(request: StarletteRequest) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+async def rate_limit_leads(request: StarletteRequest):
+    allowed, retry_after = _leads_limiter.check(_client_ip(request), time.monotonic())
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many submissions. Please wait a moment and try again.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
 # --------- Public Routes ---------
 @api_router.get("/")
 async def root():
     return {"service": "KDIPL Leads API", "status": "ok"}
 
 @api_router.post("/leads", response_model=Lead)
-async def create_lead(payload: LeadIn):
+async def create_lead(payload: LeadIn, _rl: None = Depends(rate_limit_leads)):
     lead = Lead(**payload.model_dump())
     doc = lead.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
@@ -202,6 +227,7 @@ async def create_comparison_lead(
     product_interest: Optional[str] = Form(None),
     message: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
+    _rl: None = Depends(rate_limit_leads),
 ):
     file_meta = None
     if file is not None and file.filename:
