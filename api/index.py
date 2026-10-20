@@ -48,14 +48,21 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 # endpoints. Per client IP; configurable via env (LEADS_RATE_LIMIT=0 disables).
 LEADS_RATE_LIMIT = int(os.environ.get('LEADS_RATE_LIMIT', '30'))
 LEADS_RATE_WINDOW = int(os.environ.get('LEADS_RATE_WINDOW_SECONDS', '60'))
+# Proxies we operate that each append to X-Forwarded-For (Vercel's edge = 1).
+# Only the rightmost TRUSTED_PROXY_HOPS entries are trusted, so a client can't
+# spoof its IP by forging the header; 0 ignores X-Forwarded-For entirely.
+LEADS_TRUSTED_PROXY_HOPS = int(os.environ.get('TRUSTED_PROXY_HOPS', '1'))
 _leads_hits = {}
 _leads_lock = Lock()
 
 def _client_ip(request: StarletteRequest) -> str:
+    peer = request.client.host if request.client else None
     xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    if LEADS_TRUSTED_PROXY_HOPS > 0 and xff:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if len(parts) >= LEADS_TRUSTED_PROXY_HOPS:
+            return parts[-LEADS_TRUSTED_PROXY_HOPS]
+    return peer or "unknown"
 
 def rate_limit_leads(request: StarletteRequest):
     if LEADS_RATE_LIMIT <= 0:

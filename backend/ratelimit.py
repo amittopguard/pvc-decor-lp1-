@@ -11,6 +11,35 @@ from collections import deque
 from threading import Lock
 
 
+def resolve_client_ip(
+    forwarded_for: "str | None",
+    peer: "str | None",
+    trusted_hops: int = 1,
+) -> str:
+    """Resolve the real client IP under a trusted-proxy model.
+
+    ``X-Forwarded-For`` is ``client, proxy1, proxy2, …`` where each proxy
+    *appends* the address it received the request from. Only the rightmost
+    entries — those added by proxies you operate — are trustworthy; anything
+    further left is set by the caller and is freely spoofable, so a limiter
+    keyed on the leftmost value can be bypassed by forging the header.
+
+    ``trusted_hops`` is the number of proxies in front of the app that each
+    append one entry (e.g. 1 for a single CDN/load balancer). The genuine
+    client IP is then the ``trusted_hops``-th entry counting from the right;
+    everything to its left is ignored. With ``trusted_hops <= 0`` the header
+    is not trusted at all and the direct ``peer`` address is used.
+
+    Falls back to ``peer`` (then ``"unknown"``) when the header is absent or
+    carries fewer entries than ``trusted_hops``.
+    """
+    if trusted_hops > 0 and forwarded_for:
+        parts = [p.strip() for p in forwarded_for.split(",") if p.strip()]
+        if len(parts) >= trusted_hops:
+            return parts[-trusted_hops]
+    return peer or "unknown"
+
+
 class RateLimiter:
     """Allow at most ``max_requests`` hits per ``window_seconds`` per key."""
 
