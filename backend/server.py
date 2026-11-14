@@ -23,7 +23,7 @@ from datetime import datetime, timezone, timedelta
 
 import resend
 
-from ratelimit import RateLimiter
+from ratelimit import RateLimiter, resolve_client_ip
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -182,13 +182,16 @@ async def send_lead_email(lead: Lead):
 # set LEADS_RATE_LIMIT=0 to disable entirely.
 LEADS_RATE_LIMIT = int(os.environ.get('LEADS_RATE_LIMIT', '30'))
 LEADS_RATE_WINDOW = int(os.environ.get('LEADS_RATE_WINDOW_SECONDS', '60'))
+# Number of proxies we operate that each append to X-Forwarded-For (e.g. the
+# CDN/load balancer). Only the rightmost `TRUSTED_PROXY_HOPS` entries are
+# trusted, so a client cannot spoof its IP by forging the header. Set to 0 for
+# a directly-exposed deployment (no proxy) to ignore X-Forwarded-For entirely.
+LEADS_TRUSTED_PROXY_HOPS = int(os.environ.get('TRUSTED_PROXY_HOPS', '1'))
 _leads_limiter = RateLimiter(LEADS_RATE_LIMIT, LEADS_RATE_WINDOW)
 
 def _client_ip(request: StarletteRequest) -> str:
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    peer = request.client.host if request.client else None
+    return resolve_client_ip(request.headers.get("x-forwarded-for"), peer, LEADS_TRUSTED_PROXY_HOPS)
 
 async def rate_limit_leads(request: StarletteRequest):
     allowed, retry_after = _leads_limiter.check(_client_ip(request), time.monotonic())

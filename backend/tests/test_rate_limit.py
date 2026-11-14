@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ratelimit import RateLimiter
+from ratelimit import RateLimiter, resolve_client_ip
 
 
 def test_allows_under_limit():
@@ -59,3 +59,44 @@ def test_reset_clears_budget():
     assert rl.check("ip", 1.0)[0] is False
     rl.reset("ip")
     assert rl.check("ip", 2.0)[0] is True
+
+
+# -------- resolve_client_ip (trusted-proxy model) --------
+def test_ip_single_trusted_hop_uses_rightmost():
+    # One proxy (hops=1) appended the real client; take the rightmost entry.
+    assert resolve_client_ip("1.2.3.4", "10.0.0.1", trusted_hops=1) == "1.2.3.4"
+
+
+def test_ip_spoofed_prefix_is_ignored():
+    # Attacker forges a leading entry; the proxy appends the real IP on the
+    # right, so the spoofed value must not be what we key on.
+    xff = "9.9.9.9, 1.2.3.4"  # client sent "9.9.9.9", edge appended "1.2.3.4"
+    assert resolve_client_ip(xff, "10.0.0.1", trusted_hops=1) == "1.2.3.4"
+
+
+def test_ip_multiple_trusted_hops():
+    # Two trusted proxies each appended an entry; client IP is 2nd from right.
+    xff = "evil, 1.2.3.4, 10.0.0.2"
+    assert resolve_client_ip(xff, "10.0.0.1", trusted_hops=2) == "1.2.3.4"
+
+
+def test_ip_no_header_falls_back_to_peer():
+    assert resolve_client_ip(None, "10.0.0.1", trusted_hops=1) == "10.0.0.1"
+
+
+def test_ip_hops_zero_ignores_header():
+    # Directly-exposed deployment: never trust X-Forwarded-For.
+    assert resolve_client_ip("1.2.3.4", "10.0.0.1", trusted_hops=0) == "10.0.0.1"
+
+
+def test_ip_header_shorter_than_hops_falls_back_to_peer():
+    # Misconfigured/odd request with fewer entries than trusted hops.
+    assert resolve_client_ip("1.2.3.4", "10.0.0.1", trusted_hops=2) == "10.0.0.1"
+
+
+def test_ip_no_header_no_peer_is_unknown():
+    assert resolve_client_ip(None, None, trusted_hops=1) == "unknown"
+
+
+def test_ip_ignores_whitespace_and_empty_entries():
+    assert resolve_client_ip("  9.9.9.9 ,, 1.2.3.4 ", "10.0.0.1", trusted_hops=1) == "1.2.3.4"
